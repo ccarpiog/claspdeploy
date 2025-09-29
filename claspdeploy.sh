@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Usage: ./deploy.sh "Deployment description"
 # If no description is provided, it will use "New version".
 
@@ -37,10 +37,18 @@ if [[ -f "$DEPLOYMENT_FILE" ]]; then
   DEPLOYMENT_ID="${DEPLOYMENT_ID%"${DEPLOYMENT_ID##*[![:space:]]}"}"
 fi
 
-# If not found, prompt the user and save it
+# If not found, list deployments and prompt the user
 if [[ -z "$DEPLOYMENT_ID" ]]; then
   echo "ℹ️  $DEPLOYMENT_FILE not found or is empty."
-  echo "Enter your Apps Script deploymentId and I'll save it in $DEPLOYMENT_FILE:"
+  echo ""
+  echo "📋 Current deployments:"
+  echo ""
+  if ! clasp deployments; then
+    echo "❌ Failed to list deployments. Please check your clasp authentication."
+    exit 1
+  fi
+  echo ""
+  echo "Copy and paste one of the deployment IDs above:"
   read -r -p "> " DEPLOYMENT_ID
   # Clean input
   DEPLOYMENT_ID=${DEPLOYMENT_ID//$'\r'/}
