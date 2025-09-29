@@ -6,6 +6,10 @@ set -euo pipefail
 
 DESC="${*:-New version}"          # Use all args as description, or default
 
+# Display current date and time
+echo "🕐 Deployment started at: $(date '+%Y-%m-%d %H:%M:%S')"
+echo ""
+
 # First, push local files to Apps Script
 echo "📤 Pushing local files to Apps Script..."
 if ! clasp push; then
