@@ -8,6 +8,7 @@ set -euo pipefail
 DRY_RUN=false
 SKIP_CONFIRMATION=false
 SWITCH_DEPLOYMENT=false
+ENABLE_LOGGING=false
 DESC=""
 
 # Function to display help
@@ -18,10 +19,11 @@ Usage: claspdeploy [OPTIONS] [DESCRIPTION]
 Deploy Google Apps Script projects using clasp with persistent deployment ID.
 
 OPTIONS:
-  -h, --help             Show this help message
-  -y, --yes              Skip confirmation prompt (for CI/CD)
-  -n, --dry-run          Show what would be deployed without actually deploying
+  -h, --help              Show this help message
+  -y, --yes               Skip confirmation prompt (for CI/CD)
+  -n, --dry-run           Show what would be deployed without actually deploying
   -s, --switch-deployment Change deployment ID (ignores saved deploymentId.txt)
+  -l, --log               Enable logging to deployment.log file
 
 DESCRIPTION:
   Optional deployment description. Defaults to "New version" if not provided.
@@ -51,6 +53,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     -s|--switch-deployment)
       SWITCH_DEPLOYMENT=true
+      shift
+      ;;
+    -l|--log)
+      ENABLE_LOGGING=true
       shift
       ;;
     -*)
@@ -202,22 +208,24 @@ fi
 COMPLETION_TIME=$(date '+%Y-%m-%d %H:%M:%S')
 echo "🕐 Deployment completed at: $COMPLETION_TIME"
 
-# Log deployment to file
-LOG_FILE="deployment.log"
-{
-  echo "----------------------------------------"
-  echo "Deployment Time: $COMPLETION_TIME"
-  echo "Deployment ID: $DEPLOYMENT_ID"
-  echo "Description: $DESC"
-  if [[ -n "${DEPLOYMENT_URL:-}" ]]; then
-    echo "URL: $DEPLOYMENT_URL"
-  fi
-  echo "----------------------------------------"
-  echo ""
-} >> "$LOG_FILE"
+# Log deployment to file (only if --log flag is used)
+if [[ "$ENABLE_LOGGING" == "true" ]]; then
+  LOG_FILE="deployment.log"
+  {
+    echo "----------------------------------------"
+    echo "Deployment Time: $COMPLETION_TIME"
+    echo "Deployment ID: $DEPLOYMENT_ID"
+    echo "Description: $DESC"
+    if [[ -n "${DEPLOYMENT_URL:-}" ]]; then
+      echo "URL: $DEPLOYMENT_URL"
+    fi
+    echo "----------------------------------------"
+    echo ""
+  } >> "$LOG_FILE"
 
-echo ""
-echo "📝 Deployment logged to $LOG_FILE"
+  echo ""
+  echo "📝 Deployment logged to $LOG_FILE"
+fi
 
 # Extract version number from deployment output if available
 if [[ "$DEPLOY_OUTPUT" =~ [Vv]ersion[[:space:]]+([0-9]+) ]]; then
