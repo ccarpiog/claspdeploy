@@ -1,6 +1,14 @@
 # claspdeploy
 
-A bash script that simplifies deploying Google Apps Script projects to the same deployment ID using clasp.
+A collection of bash scripts that simplify deploying Google Apps Script projects using clasp. Includes both a general deployment script and a specialized web app deployment script.
+
+## Scripts
+
+### `claspdeploy` - General deployment script
+For standard Google Apps Script deployments with persistent deployment ID management.
+
+### `deploy-webapp.sh` - Web app deployment script
+Specialized script for deploying Google Apps Script web applications with proper configuration management.
 
 ## Features
 
@@ -76,3 +84,85 @@ claspdeploy --log "Version 2.0 release"
 - [clasp](https://github.com/google/clasp) installed and authenticated
 - Bash shell
 - A Google Apps Script project already configured with clasp
+
+---
+
+# deploy-webapp.sh
+
+A specialized deployment script for Google Apps Script web applications that maintains stable web app URLs and proper configuration.
+
+## Web App Features
+
+- **Smart deployment strategy**: Prioritizes @HEAD deployment with automatic fallback
+- **URL stability**: Maintains consistent web app URLs across updates
+- **Configuration management**: Handles `webAppId.txt` and `appsscript.json` settings
+- **Clear feedback**: Shows deployment progress and resulting URLs
+- **Error recovery**: Automatic fallback mechanisms for deployment issues
+
+## Web App Usage
+
+```bash
+# Deploy with a description
+./deploy-webapp.sh "Your description of changes"
+
+# Deploy with default description
+./deploy-webapp.sh
+```
+
+## How the Web App Script Works
+
+1. **Push code** to Google Apps Script
+2. **List current deployments** for reference
+3. **Attempt @HEAD deployment** (standard for web apps)
+4. **Fallback to saved ID** if @HEAD fails
+5. **Display web app URLs** for both domain and public access
+
+## Configuration Files
+
+### `webAppId.txt`
+Stores your web app deployment ID for URL stability.
+
+### `appsscript.json`
+Contains webapp configuration:
+```json
+{
+  "webapp": {
+    "access": "DOMAIN",
+    "executeAs": "USER_ACCESSING"
+  }
+}
+```
+
+## Web App Examples
+
+```bash
+# Regular update
+./deploy-webapp.sh "Added new sorting options"
+
+# Quick fix
+./deploy-webapp.sh "Fixed authentication issue"
+
+# Feature release
+./deploy-webapp.sh "Version 2.0 - Export functionality"
+```
+
+## Web App URLs
+
+The script provides two URL formats:
+
+- **Domain-specific**: `https://script.google.com/a/macros/yourdomain.com/s/[ID]/exec`
+- **Public**: `https://script.google.com/macros/s/[ID]/exec`
+
+## First-Time Web App Setup
+
+If you haven't created a web app deployment:
+
+1. Open the Apps Script editor
+2. Click Deploy → New deployment
+3. Choose "Web app" as the type
+4. Configure permissions
+5. Save the deployment ID to `webAppId.txt`
+
+## Additional Documentation
+
+For comprehensive web app deployment information, see [DEPLOY-WEBAPP-GUIDE.md](DEPLOY-WEBAPP-GUIDE.md)
