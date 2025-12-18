@@ -198,10 +198,17 @@ echo "$DEPLOY_OUTPUT"
 echo ""
 echo "✅ Deployment successful!"
 
-# Extract and display deployment URL if available
+# Construct and display the web app URL
+WEBAPP_URL="https://script.google.com/macros/s/${DEPLOYMENT_ID}/exec"
+echo ""
+echo "🌐 Web app URL: $WEBAPP_URL"
+
+# Also extract any additional URL from clasp output if available
 if [[ "$DEPLOY_OUTPUT" =~ https://script\.google\.com/[^[:space:]]+ ]]; then
   DEPLOYMENT_URL="${BASH_REMATCH[0]}"
-  echo "🔗 Deployment URL: $DEPLOYMENT_URL"
+  if [[ "$DEPLOYMENT_URL" != "$WEBAPP_URL" ]]; then
+    echo "🔗 Deployment URL: $DEPLOYMENT_URL"
+  fi
 fi
 
 # Display completion timestamp
@@ -216,9 +223,7 @@ if [[ "$ENABLE_LOGGING" == "true" ]]; then
     echo "Deployment Time: $COMPLETION_TIME"
     echo "Deployment ID: $DEPLOYMENT_ID"
     echo "Description: $DESC"
-    if [[ -n "${DEPLOYMENT_URL:-}" ]]; then
-      echo "URL: $DEPLOYMENT_URL"
-    fi
+    echo "Web app URL: $WEBAPP_URL"
     echo "----------------------------------------"
     echo ""
   } >> "$LOG_FILE"
