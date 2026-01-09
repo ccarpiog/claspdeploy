@@ -1,17 +1,21 @@
 # claspdeploy
 
-A collection of bash scripts that simplify deploying Google Apps Script projects using clasp. Includes both a general deployment script and a specialized web app deployment script.
+A collection of bash scripts that simplify deploying Google Apps Script projects using clasp. Includes multi-account credential management, general deployment script, and a specialized web app deployment script.
 
 ## Scripts
 
+### `claspalt` - Multi-account credential manager
+Manages credentials for multiple Google accounts, eliminating the need for repeated `clasp login` commands when switching between projects.
+
 ### `claspdeploy` - General deployment script
-For standard Google Apps Script deployments with persistent deployment ID management.
+For standard Google Apps Script deployments with persistent deployment ID management. Uses `claspalt` for multi-account support.
 
 ### `deploy-webapp.sh` - Web app deployment script
 Specialized script for deploying Google Apps Script web applications with proper configuration management.
 
 ## Features
 
+- **Multi-account support**: Seamlessly switch between Google accounts without manual `clasp login`
 - **Persistent deployment ID**: Automatically saves and reuses your deployment ID
 - **Interactive confirmation**: Prompts before deploying (can be skipped with `--yes`)
 - **Dry-run mode**: Preview what would be deployed without actually deploying
@@ -19,6 +23,7 @@ Specialized script for deploying Google Apps Script web applications with proper
 - **Error handling**: Clear error messages with helpful suggestions
 - **Optional logging**: Track deployment history to a log file
 - **Deployment URL extraction**: Displays the deployed script URL after success
+- **Automatic migration**: Projects using old `deploymentId.txt` are automatically migrated
 
 ## Installation
 
@@ -28,7 +33,45 @@ Run the installation script:
 ./install.sh
 ```
 
-This will install `claspdeploy` to `~/bin/` and add it to your PATH.
+This will install `claspalt` and `claspdeploy` to `~/bin/` and add it to your PATH.
+
+## Multi-Account Setup
+
+### First-time setup
+
+When you first run `claspalt` or `claspdeploy` in a project:
+
+1. You'll be prompted to select an existing account or create a new one
+2. For new accounts, you provide a name (e.g., "work", "personal", "client-abc")
+3. Make sure the correct browser/profile is active for that Google account
+4. `clasp login` runs and credentials are saved for future use
+
+### Credentials storage
+
+- **Global credentials**: `~/.config/claspalt/{account-name}.json`
+- **Project config**: `claspConfig.txt` in each project directory
+
+### claspConfig.txt format
+
+```
+account=myaccount
+deploymentId=AKfycbw...
+```
+
+### Using claspalt directly
+
+You can use `claspalt` as a drop-in replacement for `clasp`:
+
+```bash
+# Switch account and run any clasp command
+claspalt push
+claspalt pull
+claspalt deployments
+claspalt open
+
+# Just switch/verify account without running a command
+claspalt
+```
 
 ## Usage
 
@@ -41,7 +84,7 @@ claspdeploy [OPTIONS] [DESCRIPTION]
 - `-h, --help` - Show help message
 - `-y, --yes` - Skip confirmation prompt (useful for CI/CD)
 - `-n, --dry-run` - Show what would be deployed without actually deploying
-- `-s, --switch-deployment` - Change deployment ID (ignores saved deploymentId.txt)
+- `-s, --switch-deployment` - Change deployment ID (ignores saved claspConfig.txt)
 - `-l, --log` - Enable logging to deployment.log file
 
 ### Examples
@@ -73,11 +116,19 @@ claspdeploy --log "Version 2.0 release"
 
 ## How it works
 
-1. First run: Lists available deployments and prompts you to select one
-2. Saves the deployment ID to `deploymentId.txt`
-3. Subsequent runs: Automatically uses the saved deployment ID
-4. Pushes code with `clasp push` before deploying
-5. Deploys to the saved deployment ID with your description
+1. **Account switching**: `claspalt` reads `claspConfig.txt` and switches to the correct Google account
+2. **First run**: Lists available deployments and prompts you to select one
+3. **Saves config**: Stores account name and deployment ID in `claspConfig.txt`
+4. **Subsequent runs**: Automatically uses the saved configuration
+5. **Pushes code** with `clasp push` before deploying
+6. **Deploys** to the saved deployment ID with your description
+
+## Migration from old format
+
+If your project has a `deploymentId.txt` file (old format), it will be automatically migrated to the new `claspConfig.txt` format on first run. You'll be prompted to select or create an account, and then:
+
+- `claspConfig.txt` is created with both the account and deployment ID
+- `deploymentId.txt` is deleted
 
 ## Requirements
 
@@ -118,6 +169,13 @@ A specialized deployment script for Google Apps Script web applications that mai
 5. **Display web app URLs** for both domain and public access
 
 ## Configuration Files
+
+### `claspConfig.txt`
+Stores your account name and deployment ID:
+```
+account=myaccount
+deploymentId=AKfycbw...
+```
 
 ### `webAppId.txt`
 Stores your web app deployment ID for URL stability.
