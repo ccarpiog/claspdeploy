@@ -43,7 +43,7 @@ ensure_config_dir() {
   if [[ ! -d "$CLASPALT_CONFIG_DIR" ]]; then
     mkdir -p "$CLASPALT_CONFIG_DIR"
     chmod 700 "$CLASPALT_CONFIG_DIR"
-    echo "📁 Created credentials directory: $CLASPALT_CONFIG_DIR"
+    echo "📁 Created credentials directory: $CLASPALT_CONFIG_DIR" >&2
   fi
 } # End of function ensure_config_dir()
 
@@ -128,9 +128,10 @@ prompt_account_selection() {
     local accounts
     accounts=$(list_accounts)
 
-    echo ""
-    echo "🔐 Selecciona una cuenta de Google:"
-    echo ""
+    # All menu output goes to stderr so it displays when called via $()
+    echo "" >&2
+    echo "🔐 Selecciona una cuenta de Google:" >&2
+    echo "" >&2
 
     local count=0
     local account_array=()
@@ -139,21 +140,25 @@ prompt_account_selection() {
       while IFS= read -r account; do
         count=$((count + 1))
         account_array+=("$account")
-        echo "  $count) $account"
+        echo "  $count) $account" >&2
       done <<< "$accounts"
-      echo ""
+      echo "" >&2
+    else
+      echo "  (No hay cuentas guardadas)" >&2
+      echo "" >&2
     fi
 
-    echo "  N) Crear nueva cuenta"
-    echo ""
+    echo "  N) Crear nueva cuenta" >&2
+    echo "" >&2
 
     local choice
-    read -r -p "Selección: " choice
+    read -r -p "Selección (número o N): " choice
 
     if [[ "$choice" =~ ^[Nn]$ ]]; then
       create_new_account
       return
     elif [[ "$choice" =~ ^[0-9]+$ ]] && [[ "$choice" -ge 1 ]] && [[ "$choice" -le "$count" ]]; then
+      # Only the account name goes to stdout (return value)
       echo "${account_array[$((choice - 1))]}"
       return
     else
@@ -173,7 +178,8 @@ create_new_account() {
   while true; do
     local name
 
-    echo ""
+    # All prompts go to stderr so they display when called via $()
+    echo "" >&2
     read -r -p "Nombre para la nueva cuenta (solo letras, números, guiones y guiones bajos): " name
 
     # Validate name
@@ -188,16 +194,16 @@ create_new_account() {
       continue
     fi
 
-    echo ""
-    echo "⚠️  IMPORTANTE: Asegúrate de que el navegador activo está conectado a la cuenta de Google correcta."
-    echo ""
+    echo "" >&2
+    echo "⚠️  IMPORTANTE: Asegúrate de que el navegador activo está conectado a la cuenta de Google correcta." >&2
+    echo "" >&2
     read -r -p "Pulsa Enter cuando estés listo para continuar..."
 
-    echo ""
-    echo "🔑 Iniciando sesión con clasp..."
+    echo "" >&2
+    echo "🔑 Iniciando sesión con clasp..." >&2
 
-    # Run clasp login
-    if ! clasp login; then
+    # Run clasp login (redirect stdout to stderr so it doesn't pollute return value)
+    if ! clasp login >&2; then
       show_error "clasp login ha fallado"
     fi
 
@@ -208,12 +214,13 @@ create_new_account() {
       cp "$CLASP_CREDENTIALS" "$temp_file"
       chmod 600 "$temp_file"
       mv "$temp_file" "$CLASPALT_CONFIG_DIR/${name}.json"
-      echo ""
-      echo "✅ Credenciales guardadas para la cuenta: $name"
+      echo "" >&2
+      echo "✅ Credenciales guardadas para la cuenta: $name" >&2
     else
       show_error "No se encontraron credenciales en $CLASP_CREDENTIALS"
     fi
 
+    # Only the account name goes to stdout (return value)
     echo "$name"
     return
   done
