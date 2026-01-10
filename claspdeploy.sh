@@ -7,15 +7,27 @@
 
 set -euo pipefail
 
+# --- BEGIN COMMON FUNCTIONS ---
+# These functions are embedded by install.sh from lib/common.sh
+# During development, source the file directly:
+if [[ -f "$(dirname "$0")/lib/common.sh" ]]; then
+  # shellcheck source=lib/common.sh
+  source "$(dirname "$0")/lib/common.sh"
+elif [[ -f "$(dirname "$0")/../lib/common.sh" ]]; then
+  # shellcheck source=lib/common.sh
+  source "$(dirname "$0")/../lib/common.sh"
+else
+  echo "Error: lib/common.sh not found. Run install.sh or execute from the repo." >&2
+  exit 1
+fi
+# --- END COMMON FUNCTIONS ---
+
 # Default values
 DRY_RUN=false
 SKIP_CONFIRMATION=false
 SWITCH_DEPLOYMENT=false
 ENABLE_LOGGING=false
 DESC=""
-
-# Configuration
-CONFIG_FILE="claspConfig.txt"
 
 ##
 # Function to display help
@@ -45,52 +57,6 @@ EXAMPLES:
 EOF
   exit 0
 } # End of function show_help()
-
-##
-# Reads a value from claspConfig.txt
-# @param {string} $1 - Key to read (e.g., "account" or "deploymentId")
-# @returns The value associated with the key, or empty string if not found
-##
-read_config_value() {
-  local key="$1"
-  if [[ -f "$CONFIG_FILE" ]]; then
-    # Use anchored regex to match key at start of line only
-    # Use || true to avoid exit on no match due to set -e + pipefail
-    grep "^${key}=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2- | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || true
-  fi
-} # End of function read_config_value()
-
-##
-# Writes or updates a value in claspConfig.txt
-# @param {string} $1 - Key to write
-# @param {string} $2 - Value to write
-##
-write_config_value() {
-  local key="$1"
-  local value="$2"
-
-  if [[ -f "$CONFIG_FILE" ]]; then
-    if grep -q "^${key}=" "$CONFIG_FILE" 2>/dev/null; then
-      # Update existing key using a temp file for compatibility
-      local temp_file
-      temp_file=$(mktemp)
-      while IFS= read -r line || [[ -n "$line" ]]; do
-        if [[ "$line" == "${key}="* ]]; then
-          echo "${key}=${value}"
-        else
-          echo "$line"
-        fi
-      done < "$CONFIG_FILE" > "$temp_file"
-      mv "$temp_file" "$CONFIG_FILE"
-    else
-      # Append new key
-      echo "${key}=${value}" >> "$CONFIG_FILE"
-    fi
-  else
-    # Create new file
-    echo "${key}=${value}" > "$CONFIG_FILE"
-  fi
-} # End of function write_config_value()
 
 # Parse command-line arguments
 while [[ $# -gt 0 ]]; do
@@ -130,6 +96,13 @@ done
 
 # Set default description if none provided
 DESC="${DESC:-New version}"
+
+# Check that claspalt is available
+if ! command -v claspalt &> /dev/null; then
+  echo "Error: claspalt is not installed or not in PATH." >&2
+  echo "Please run install.sh or add ~/bin to your PATH." >&2
+  exit 1
+fi
 
 # Display current date and time
 echo "🕐 Deployment started at: $(date '+%Y-%m-%d %H:%M:%S')"
@@ -173,6 +146,13 @@ fi
 
 # If not found, list deployments and prompt the user
 if [[ -z "$DEPLOYMENT_ID" ]]; then
+  # Check for interactive terminal before prompting
+  if ! is_interactive; then
+    echo "Error: No deploymentId configured and running in non-interactive mode." >&2
+    echo "Please run interactively first to configure, or use --yes with a pre-configured project." >&2
+    exit 1
+  fi
+
   if [[ "$SWITCH_DEPLOYMENT" == "false" ]]; then
     echo "ℹ️  No deploymentId found in $CONFIG_FILE."
   fi

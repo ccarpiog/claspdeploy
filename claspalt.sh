@@ -8,24 +8,31 @@
 
 set -euo pipefail
 
+# --- BEGIN COMMON FUNCTIONS ---
+# These functions are embedded by install.sh from lib/common.sh
+# During development, source the file directly:
+if [[ -f "$(dirname "$0")/lib/common.sh" ]]; then
+  # shellcheck source=lib/common.sh
+  source "$(dirname "$0")/lib/common.sh"
+elif [[ -f "$(dirname "$0")/../lib/common.sh" ]]; then
+  # shellcheck source=lib/common.sh
+  source "$(dirname "$0")/../lib/common.sh"
+else
+  echo "Error: lib/common.sh not found. Run install.sh or execute from the repo." >&2
+  exit 1
+fi
+# --- END COMMON FUNCTIONS ---
+
 # Configuration paths
 CLASPALT_CONFIG_DIR="$HOME/.config/claspalt"
 CLASP_CREDENTIALS="$HOME/.clasprc.json"
 LOCAL_CONFIG_FILE="claspConfig.txt"
 OLD_DEPLOYMENT_FILE="deploymentId.txt"
+CONFIG_FILE="$LOCAL_CONFIG_FILE"
 
 # ============================================================================
 # Helper Functions
 # ============================================================================
-
-##
-# Displays an error message and exits
-# @param {string} $1 - Error message to display
-##
-show_error() {
-  echo "❌ ERROR: $1" >&2
-  exit 1
-} # End of function show_error()
 
 ##
 # Checks if clasp is installed
@@ -56,53 +63,6 @@ list_accounts() {
     find "$CLASPALT_CONFIG_DIR" -maxdepth 1 -name "*.json" -exec basename {} .json \; 2>/dev/null | sort
   fi
 } # End of function list_accounts()
-
-##
-# Reads a value from claspConfig.txt
-# @param {string} $1 - Key to read (e.g., "account" or "deploymentId")
-# @returns The value associated with the key, or empty string if not found
-##
-read_config_value() {
-  local key="$1"
-  if [[ -f "$LOCAL_CONFIG_FILE" ]]; then
-    # Use anchored regex to match key at start of line only
-    # Use || true to avoid exit on no match due to set -e + pipefail
-    grep "^${key}=" "$LOCAL_CONFIG_FILE" 2>/dev/null | head -1 | cut -d'=' -f2- | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || true
-  fi
-} # End of function read_config_value()
-
-##
-# Writes or updates a value in claspConfig.txt
-# @param {string} $1 - Key to write
-# @param {string} $2 - Value to write
-##
-write_config_value() {
-  local key="$1"
-  local value="$2"
-
-  if [[ -f "$LOCAL_CONFIG_FILE" ]]; then
-    # Check if key exists using fixed string matching
-    if grep -q "^${key}=" "$LOCAL_CONFIG_FILE" 2>/dev/null; then
-      # Update existing key using a temp file for compatibility
-      local temp_file
-      temp_file=$(mktemp)
-      while IFS= read -r line || [[ -n "$line" ]]; do
-        if [[ "$line" == "${key}="* ]]; then
-          echo "${key}=${value}"
-        else
-          echo "$line"
-        fi
-      done < "$LOCAL_CONFIG_FILE" > "$temp_file"
-      mv "$temp_file" "$LOCAL_CONFIG_FILE"
-    else
-      # Append new key
-      echo "${key}=${value}" >> "$LOCAL_CONFIG_FILE"
-    fi
-  else
-    # Create new file
-    echo "${key}=${value}" > "$LOCAL_CONFIG_FILE"
-  fi
-} # End of function write_config_value()
 
 ##
 # Validates that an account name contains only allowed characters
