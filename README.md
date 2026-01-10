@@ -68,10 +68,10 @@ claspalt --list
 Output:
 ```
 account-personal
-account-work (activa)
+account-work (active)
 account-client
 ```
-The `(activa)` marker shows which account is configured for the current project directory.
+The `(active)` marker shows which account is configured for the current project directory.
 
 **Interactive account manager:**
 ```bash
@@ -81,12 +81,12 @@ Opens a terminal UI where you can:
 - Navigate with arrow keys (↑/↓)
 - Select accounts with Space
 - Add new accounts with `A`
-- Delete selected accounts with `B`
+- Delete selected accounts with `D`
 - Quit with `Q`
 
 ```
 ══════════════════════════════════════════
-       CLASPALT - Gestión de cuentas
+       CLASPALT - Account Management
 ══════════════════════════════════════════
 
 > [ ] 1. account-personal
@@ -94,9 +94,9 @@ Opens a terminal UI where you can:
   [ ] 3. account-client
 
 ──────────────────────────────────────────
-  [A]ñadir   [B]orrar seleccionados   [Q]Salir
-  Espacio: seleccionar/deseleccionar
-  ↑/↓: navegar
+  [A]dd   [D]elete selected   [Q]uit
+  Space: select/deselect
+  ↑/↓: navigate
 ──────────────────────────────────────────
 ```
 
@@ -146,6 +146,12 @@ When you run `claspalt push`:
 ## claspdeploy - Deployment Script
 
 ### What it does
+
+`claspdeploy` solves a common problem when developing Google Apps Script web apps: **keeping the same URL across multiple deployments**.
+
+When you run `clasp deploy`, it creates a new deployment with a new URL. But during development, you want to test with a consistent URL that you can bookmark or share. `claspdeploy` saves your deployment ID and reuses it on every deploy, so your web app URL stays the same after each `clasp push`.
+
+**Main use case**: Reusing a deployment ID easily from the command line so you can keep the same URL for testing after every `clasp push`.
 
 `claspdeploy` combines `clasp push` and `clasp deploy` into a single command, managing your deployment ID automatically.
 
@@ -231,7 +237,7 @@ clasp login  # Initial login (claspalt will manage accounts after this)
 
 ## Troubleshooting
 
-### "clasp no está instalado"
+### "clasp is not installed"
 Install clasp with `npm install -g @google/clasp`
 
 ### Account credentials expired

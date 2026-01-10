@@ -32,7 +32,7 @@ show_error() {
 ##
 check_clasp_installed() {
   if ! command -v clasp &> /dev/null; then
-    show_error "clasp no está instalado. Instálalo con: npm install -g @google/clasp"
+    show_error "clasp is not installed. Install it with: npm install -g @google/clasp"
   fi
 } # End of function check_clasp_installed()
 
@@ -123,32 +123,32 @@ validate_account_name() {
 ##
 show_help() {
   cat << 'EOF'
-claspalt - Gestor de credenciales multi-cuenta para clasp
+claspalt - Multi-account credential manager for clasp
 
-USO:
-  claspalt [OPCIONES]
-  claspalt [COMANDOS_CLASP...]
+USAGE:
+  claspalt [OPTIONS]
+  claspalt [CLASP_COMMANDS...]
 
-OPCIONES:
-  -h, --help     Muestra esta ayuda
-  -l, --list     Lista las cuentas disponibles
-  -e, --edit     Gestión interactiva de cuentas
+OPTIONS:
+  -h, --help     Show this help
+  -l, --list     List available accounts
+  -e, --edit     Interactive account management
 
-DESCRIPCIÓN:
-  claspalt permite gestionar múltiples cuentas de Google para clasp.
-  Las credenciales se almacenan en ~/.config/claspalt/{cuenta}.json
-  La configuración del proyecto se guarda en claspConfig.txt
+DESCRIPTION:
+  claspalt allows managing multiple Google accounts for clasp.
+  Credentials are stored in ~/.config/claspalt/{account}.json
+  Project configuration is saved in claspConfig.txt
 
-EJEMPLOS:
-  claspalt --help              Muestra esta ayuda
-  claspalt --list              Lista todas las cuentas
-  claspalt --edit              Abre el gestor interactivo de cuentas
-  claspalt push                Ejecuta 'clasp push' con la cuenta configurada
-  claspalt deploy -d "v1.0"    Ejecuta 'clasp deploy' con la cuenta configurada
+EXAMPLES:
+  claspalt --help              Show this help
+  claspalt --list              List all accounts
+  claspalt --edit              Open interactive account manager
+  claspalt push                Run 'clasp push' with the configured account
+  claspalt deploy -d "v1.0"    Run 'clasp deploy' with the configured account
 
-ARCHIVOS:
-  ~/.config/claspalt/          Directorio de credenciales
-  claspConfig.txt              Configuración del proyecto (cuenta y deploymentId)
+FILES:
+  ~/.config/claspalt/          Credentials directory
+  claspConfig.txt              Project configuration (account and deploymentId)
 
 EOF
 } # End of function show_help()
@@ -162,8 +162,8 @@ list_accounts_cli() {
   accounts=$(list_accounts)
 
   if [[ -z "$accounts" ]]; then
-    echo "No hay cuentas guardadas."
-    echo "Usa 'claspalt --edit' para añadir una cuenta."
+    echo "No saved accounts."
+    echo "Use 'claspalt --edit' to add an account."
     return
   fi
 
@@ -176,7 +176,7 @@ list_accounts_cli() {
   # Print each account, marking the active one
   while IFS= read -r account; do
     if [[ "$account" == "$active_account" ]]; then
-      echo "$account (activa)"
+      echo "$account (active)"
     else
       echo "$account"
     fi
@@ -200,13 +200,13 @@ draw_edit_ui() {
 
   # Header
   echo "══════════════════════════════════════════"
-  echo "       CLASPALT - Gestión de cuentas"
+  echo "       CLASPALT - Account Management"
   echo "══════════════════════════════════════════"
   echo ""
 
   # Account list
   if [[ ${#_UI_ACCOUNTS[@]} -eq 0 ]]; then
-    echo "  (No hay cuentas guardadas)"
+    echo "  (No saved accounts)"
   else
     local i=0
     for account in "${_UI_ACCOUNTS[@]}"; do
@@ -226,7 +226,7 @@ draw_edit_ui() {
 
       # Active account marker
       if [[ "$account" == "$_UI_ACTIVE_ACCOUNT" ]]; then
-        suffix=" (activa)"
+        suffix=" (active)"
       fi
 
       echo "${prefix}${checkbox} $((i + 1)). ${account}${suffix}"
@@ -244,9 +244,9 @@ draw_edit_ui() {
 
   # Footer with commands
   echo "──────────────────────────────────────────"
-  echo "  [A]ñadir   [B]orrar seleccionados   [Q]Salir"
-  echo "  Espacio: seleccionar/deseleccionar"
-  echo "  ↑/↓: navegar"
+  echo "  [A]dd   [D]elete selected   [Q]uit"
+  echo "  Space: select/deselect"
+  echo "  ↑/↓: navigate"
   echo "──────────────────────────────────────────"
 } # End of function draw_edit_ui()
 
@@ -277,17 +277,17 @@ delete_selected_accounts() {
   # Show warning if deleting active account
   if [[ "$will_delete_active" == true ]]; then
     echo ""
-    echo "⚠️  AVISO: Vas a borrar la cuenta activa en este proyecto."
-    echo "   Tendrás que seleccionar otra cuenta la próxima vez que uses claspalt."
+    echo "⚠️  WARNING: You are about to delete the active account in this project."
+    echo "   You will need to select another account the next time you use claspalt."
   fi
 
   # Confirmation prompt
   echo ""
   local plural=""
   [[ $count -gt 1 ]] && plural="s"
-  read -r -p "¿Seguro que quieres borrar $count cuenta${plural}? (s/N): " confirm
+  read -r -p "Are you sure you want to delete $count account${plural}? (y/N): " confirm
 
-  if [[ ! "$confirm" =~ ^[Ss]$ ]]; then
+  if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
     return 1
   fi
 
@@ -333,7 +333,7 @@ reload_ui_accounts() {
 edit_accounts_ui() {
   # Require interactive terminal
   if [[ ! -t 0 ]]; then
-    show_error "El modo edición requiere un terminal interactivo"
+    show_error "Edit mode requires an interactive terminal"
   fi
 
   ensure_config_dir
@@ -398,13 +398,13 @@ edit_accounts_ui() {
         new_account=$(create_new_account)
         if [[ -n "$new_account" ]]; then
           reload_ui_accounts
-          _UI_MESSAGE="✅ Cuenta '$new_account' añadida"
+          _UI_MESSAGE="✅ Account '$new_account' added"
         fi
         ;;
-      [Bb]) # B - Delete selected
+      [Dd]) # D - Delete selected
         if delete_selected_accounts; then
           reload_ui_accounts
-          _UI_MESSAGE="✅ Cuentas eliminadas"
+          _UI_MESSAGE="✅ Accounts deleted"
         else
           # Check if nothing was selected
           local has_selection=false
@@ -412,7 +412,7 @@ edit_accounts_ui() {
             [[ $s -eq 1 ]] && has_selection=true && break
           done
           if [[ "$has_selection" == false ]] && [[ ${#_UI_ACCOUNTS[@]} -gt 0 ]]; then
-            _UI_MESSAGE="⚠️  No hay cuentas seleccionadas"
+            _UI_MESSAGE="⚠️  No accounts selected"
           fi
         fi
         ;;
@@ -442,7 +442,7 @@ prompt_account_selection() {
 
     # All menu output goes to stderr so it displays when called via $()
     echo "" >&2
-    echo "🔐 Selecciona una cuenta de Google:" >&2
+    echo "🔐 Select a Google account:" >&2
     echo "" >&2
 
     local count=0
@@ -456,15 +456,15 @@ prompt_account_selection() {
       done <<< "$accounts"
       echo "" >&2
     else
-      echo "  (No hay cuentas guardadas)" >&2
+      echo "  (No saved accounts)" >&2
       echo "" >&2
     fi
 
-    echo "  N) Crear nueva cuenta" >&2
+    echo "  N) Create new account" >&2
     echo "" >&2
 
     local choice
-    read -r -p "Selección (número o N): " choice
+    read -r -p "Selection (number or N): " choice
 
     if [[ "$choice" =~ ^[Nn]$ ]]; then
       create_new_account
@@ -474,7 +474,7 @@ prompt_account_selection() {
       echo "${account_array[$((choice - 1))]}"
       return
     else
-      echo "❌ Selección no válida. Inténtalo de nuevo." >&2
+      echo "❌ Invalid selection. Try again." >&2
     fi
   done
 } # End of function prompt_account_selection()
@@ -492,31 +492,31 @@ create_new_account() {
 
     # All prompts go to stderr so they display when called via $()
     echo "" >&2
-    read -r -p "Nombre para la nueva cuenta (solo letras, números, guiones y guiones bajos): " name
+    read -r -p "Name for the new account (letters, numbers, hyphens and underscores only): " name
 
     # Validate name
     if ! validate_account_name "$name"; then
-      echo "❌ Nombre no válido. Usa solo letras, números, guiones y guiones bajos." >&2
+      echo "❌ Invalid name. Use only letters, numbers, hyphens and underscores." >&2
       continue
     fi
 
     # Check if account already exists
     if [[ -f "$CLASPALT_CONFIG_DIR/${name}.json" ]]; then
-      echo "❌ Ya existe una cuenta con ese nombre." >&2
+      echo "❌ An account with that name already exists." >&2
       continue
     fi
 
     echo "" >&2
-    echo "⚠️  IMPORTANTE: Asegúrate de que el navegador activo está conectado a la cuenta de Google correcta." >&2
+    echo "⚠️  IMPORTANT: Make sure the active browser is connected to the correct Google account." >&2
     echo "" >&2
-    read -r -p "Pulsa Enter cuando estés listo para continuar..."
+    read -r -p "Press Enter when ready to continue..."
 
     echo "" >&2
-    echo "🔑 Iniciando sesión con clasp..." >&2
+    echo "🔑 Logging in with clasp..." >&2
 
     # Run clasp login (redirect stdout to stderr so it doesn't pollute return value)
     if ! clasp login >&2; then
-      show_error "clasp login ha fallado"
+      show_error "clasp login failed"
     fi
 
     # Save credentials atomically (copy to temp, then move)
@@ -527,9 +527,9 @@ create_new_account() {
       chmod 600 "$temp_file"
       mv "$temp_file" "$CLASPALT_CONFIG_DIR/${name}.json"
       echo "" >&2
-      echo "✅ Credenciales guardadas para la cuenta: $name" >&2
+      echo "✅ Credentials saved for account: $name" >&2
     else
-      show_error "No se encontraron credenciales en $CLASP_CREDENTIALS"
+      show_error "Credentials not found in $CLASP_CREDENTIALS"
     fi
 
     # Only the account name goes to stdout (return value)
@@ -548,29 +548,29 @@ switch_to_account() {
 
   if [[ ! -f "$account_file" ]]; then
     echo ""
-    echo "⚠️  No se encontraron credenciales para la cuenta: $account"
+    echo "⚠️  Credentials not found for account: $account"
     echo ""
-    echo "¿Qué deseas hacer?"
-    echo "  1) Crear la cuenta '$account' ahora"
-    echo "  2) Seleccionar otra cuenta"
+    echo "What would you like to do?"
+    echo "  1) Create the account '$account' now"
+    echo "  2) Select another account"
     echo ""
 
     local choice
-    read -r -p "Selección [1/2]: " choice
+    read -r -p "Selection [1/2]: " choice
 
     if [[ "$choice" == "1" ]]; then
       ensure_config_dir
 
       echo ""
-      echo "⚠️  IMPORTANTE: Asegúrate de que el navegador activo está conectado a la cuenta de Google correcta."
+      echo "⚠️  IMPORTANT: Make sure the active browser is connected to the correct Google account."
       echo ""
-      read -r -p "Pulsa Enter cuando estés listo para continuar..."
+      read -r -p "Press Enter when ready to continue..."
 
       echo ""
-      echo "🔑 Iniciando sesión con clasp..."
+      echo "🔑 Logging in with clasp..."
 
       if ! clasp login; then
-        show_error "clasp login ha fallado"
+        show_error "clasp login failed"
       fi
 
       if [[ -f "$CLASP_CREDENTIALS" ]]; then
@@ -581,9 +581,9 @@ switch_to_account() {
         chmod 600 "$temp_file"
         mv "$temp_file" "$account_file"
         echo ""
-        echo "✅ Credenciales guardadas para la cuenta: $account"
+        echo "✅ Credentials saved for account: $account"
       else
-        show_error "No se encontraron credenciales en $CLASP_CREDENTIALS"
+        show_error "Credentials not found in $CLASP_CREDENTIALS"
       fi
     else
       local new_account
@@ -607,7 +607,7 @@ switch_to_account() {
 ##
 migrate_from_old_format() {
   echo ""
-  echo "📋 Detectado archivo deploymentId.txt antiguo. Migrando al nuevo formato..."
+  echo "📋 Old deploymentId.txt file detected. Migrating to the new format..."
 
   # Read old deployment ID
   local deployment_id
@@ -628,8 +628,8 @@ migrate_from_old_format() {
   rm -f "$OLD_DEPLOYMENT_FILE"
 
   echo ""
-  echo "✅ Migración completada. Nuevo archivo: $LOCAL_CONFIG_FILE"
-  echo "   Archivo antiguo eliminado: $OLD_DEPLOYMENT_FILE"
+  echo "✅ Migration completed. New file: $LOCAL_CONFIG_FILE"
+  echo "   Old file deleted: $OLD_DEPLOYMENT_FILE"
 } # End of function migrate_from_old_format()
 
 ##
@@ -637,7 +637,7 @@ migrate_from_old_format() {
 ##
 init_new_project() {
   echo ""
-  echo "📋 No se encontró configuración de proyecto."
+  echo "📋 No project configuration found."
 
   # Prompt for account selection
   local account
@@ -647,7 +647,7 @@ init_new_project() {
   write_config_value "account" "$account"
 
   echo ""
-  echo "✅ Configuración guardada en $LOCAL_CONFIG_FILE"
+  echo "✅ Configuration saved to $LOCAL_CONFIG_FILE"
 } # End of function init_new_project()
 
 # ============================================================================
@@ -671,7 +671,7 @@ main() {
     if [[ -z "$account" ]]; then
       # Config exists but no account set - prompt for one
       echo ""
-      echo "⚠️  El archivo $LOCAL_CONFIG_FILE existe pero no tiene cuenta configurada."
+      echo "⚠️  The file $LOCAL_CONFIG_FILE exists but has no account configured."
       account=$(prompt_account_selection)
       write_config_value "account" "$account"
     fi
@@ -693,8 +693,8 @@ main() {
   # If no arguments passed, just confirm the switch
   if [[ $# -eq 0 ]]; then
     echo ""
-    echo "✅ Cuenta activa: $account"
-    echo "💡 Usa 'claspalt <comando>' para ejecutar comandos de clasp"
+    echo "✅ Active account: $account"
+    echo "💡 Use 'claspalt <command>' to run clasp commands"
     exit 0
   fi
 
@@ -714,17 +714,17 @@ main() {
 parse_flags_or_exit() {
   case "${1:-}" in
     --help|-h)
-      [[ $# -gt 1 ]] && show_error "La opción $1 no admite argumentos adicionales"
+      [[ $# -gt 1 ]] && show_error "Option $1 does not accept additional arguments"
       show_help
       exit 0
       ;;
     --list|-l)
-      [[ $# -gt 1 ]] && show_error "La opción $1 no admite argumentos adicionales"
+      [[ $# -gt 1 ]] && show_error "Option $1 does not accept additional arguments"
       list_accounts_cli
       exit 0
       ;;
     --edit|-e)
-      [[ $# -gt 1 ]] && show_error "La opción $1 no admite argumentos adicionales"
+      [[ $# -gt 1 ]] && show_error "Option $1 does not accept additional arguments"
       edit_accounts_ui
       exit 0
       ;;
