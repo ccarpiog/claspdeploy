@@ -313,26 +313,42 @@ edit_accounts_ui() {
   # Initial load
   reload_ui_accounts
 
+  # Save terminal state and configure for raw input
+  local orig_stty
+  orig_stty=$(stty -g </dev/tty)
+  # Restore terminal on exit (normal or error)
+  trap 'stty "$orig_stty" </dev/tty 2>/dev/null' RETURN
+  # Disable echo and canonical mode; min 0 time 1 allows quick non-blocking reads
+  stty -echo -icanon min 0 time 1 </dev/tty
+
   # Main UI loop
   while true; do
     draw_edit_ui
     _UI_MESSAGE=""
 
-    # Read single keypress
+    # Read single keypress from /dev/tty
     local key
-    IFS= read -rsn1 key
+    IFS= read -rsn1 key </dev/tty || continue
 
     # Handle escape sequences (arrow keys)
+    # Supports both standard mode (ESC [ A/B) and application cursor mode (ESC O A/B)
     if [[ "$key" == $'\e' ]]; then
-      local seq
-      IFS= read -rsn2 -t 0.1 seq || true
+      local seq="" ch=""
+      # Read escape sequence one byte at a time to handle macOS bash quirks
+      while IFS= read -rsn1 ch </dev/tty; do
+        seq+="$ch"
+        # Stop once we have a known 2-char arrow sequence
+        [[ "$seq" == '[A' || "$seq" == '[B' || "$seq" == 'OA' || "$seq" == 'OB' ]] && break
+        # Bail if sequence is too long (not an arrow key)
+        [[ ${#seq} -ge 3 ]] && break
+      done
       case "$seq" in
-        '[A') # Up arrow
+        '[A'|'OA') # Up arrow
           if [[ ${#_UI_ACCOUNTS[@]} -gt 0 ]] && [[ $_UI_CURSOR -gt 0 ]]; then
             ((_UI_CURSOR--)) || true
           fi
           ;;
-        '[B') # Down arrow
+        '[B'|'OB') # Down arrow
           if [[ ${#_UI_ACCOUNTS[@]} -gt 0 ]] && [[ $_UI_CURSOR -lt $((${#_UI_ACCOUNTS[@]} - 1)) ]]; then
             ((_UI_CURSOR++)) || true
           fi
