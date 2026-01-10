@@ -16,7 +16,6 @@ If you work with multiple Google Apps Script projects across different Google ac
 |--------|-------------|
 | `claspalt` | Multi-account credential manager - use instead of `clasp` |
 | `claspdeploy` | Deployment script with persistent deployment ID management |
-| `deploy-webapp.sh` | Specialized script for web app deployments |
 
 ## Quick Start
 
@@ -212,32 +211,6 @@ If your project has an old `deploymentId.txt` file, it will be automatically mig
 - You'll select an account
 - `claspConfig.txt` is created with both values
 - `deploymentId.txt` is deleted
-
----
-
-## deploy-webapp.sh - Web App Deployment
-
-A specialized script for deploying Google Apps Script web applications.
-
-### Features
-
-- Prioritizes @HEAD deployment with automatic fallback
-- Maintains stable web app URLs
-- Displays both domain-specific and public URLs
-
-### Usage
-
-```bash
-./deploy-webapp.sh "Description of changes"
-```
-
-### Web App URLs
-
-After deployment, you'll see:
-- **Domain**: `https://script.google.com/a/macros/yourdomain.com/s/[ID]/exec`
-- **Public**: `https://script.google.com/macros/s/[ID]/exec`
-
-For detailed web app deployment instructions, see [DEPLOY-WEBAPP-GUIDE.md](DEPLOY-WEBAPP-GUIDE.md).
 
 ---
 
