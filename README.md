@@ -1,226 +1,285 @@
 # claspdeploy
 
-A collection of bash scripts that simplify deploying Google Apps Script projects using clasp. Includes multi-account credential management, general deployment script, and a specialized web app deployment script.
+A collection of bash scripts that simplify deploying Google Apps Script projects using clasp. Includes multi-account credential management for seamlessly switching between Google accounts without repeated logins.
 
-## Scripts
+## Overview
 
-### `claspalt` - Multi-account credential manager
-Manages credentials for multiple Google accounts, eliminating the need for repeated `clasp login` commands when switching between projects.
+If you work with multiple Google Apps Script projects across different Google accounts, you know the pain of constantly running `clasp login` to switch accounts. This toolset solves that problem by:
 
-### `claspdeploy` - General deployment script
-For standard Google Apps Script deployments with persistent deployment ID management. Uses `claspalt` for multi-account support.
+- Storing credentials for each Google account separately
+- Automatically switching to the correct account based on project configuration
+- Providing an interactive UI for managing accounts
 
-### `deploy-webapp.sh` - Web app deployment script
-Specialized script for deploying Google Apps Script web applications with proper configuration management.
+## Scripts Included
 
-## Features
+| Script | Description |
+|--------|-------------|
+| `claspalt` | Multi-account credential manager - use instead of `clasp` |
+| `claspdeploy` | Deployment script with persistent deployment ID management |
+| `deploy-webapp.sh` | Specialized script for web app deployments |
 
-- **Multi-account support**: Seamlessly switch between Google accounts without manual `clasp login`
-- **Persistent deployment ID**: Automatically saves and reuses your deployment ID
-- **Interactive confirmation**: Prompts before deploying (can be skipped with `--yes`)
-- **Dry-run mode**: Preview what would be deployed without actually deploying
-- **Switch deployments**: Easily change to a different deployment ID
-- **Error handling**: Clear error messages with helpful suggestions
-- **Optional logging**: Track deployment history to a log file
-- **Deployment URL extraction**: Displays the deployed script URL after success
-- **Automatic migration**: Projects using old `deploymentId.txt` are automatically migrated
+## Quick Start
 
-## Installation
-
-Run the installation script:
+### Installation
 
 ```bash
+git clone https://github.com/yourusername/claspdeploy.git
+cd claspdeploy
 ./install.sh
 ```
 
-This will install `claspalt` and `claspdeploy` to `~/bin/` and add it to your PATH.
+This installs `claspalt` and `claspdeploy` to `~/bin/` and creates the credentials directory at `~/.config/claspalt/`.
 
-## Multi-Account Setup
-
-### First-time setup
-
-When you first run `claspalt` or `claspdeploy` in a project:
-
-1. You'll be prompted to select an existing account or create a new one
-2. For new accounts, you provide a name (e.g., "work", "personal", "client-abc")
-3. Make sure the correct browser/profile is active for that Google account
-4. `clasp login` runs and credentials are saved for future use
-
-### Credentials storage
-
-- **Global credentials**: `~/.config/claspalt/{account-name}.json`
-- **Project config**: `claspConfig.txt` in each project directory
-
-### claspConfig.txt format
-
-```
-account=myaccount
-deploymentId=AKfycbw...
-```
-
-### Using claspalt directly
-
-You can use `claspalt` as a drop-in replacement for `clasp`:
+### Basic Usage
 
 ```bash
-# Switch account and run any clasp command
-claspalt push
-claspalt pull
-claspalt deployments
-claspalt open
-
-# Just switch/verify account without running a command
-claspalt
+# In any clasp project directory:
+claspalt push              # Push code using the configured account
+claspdeploy "Bug fix"      # Push and deploy with a description
 ```
 
-## Usage
+On first run, you'll be prompted to select or create an account.
+
+---
+
+## claspalt - Multi-Account Credential Manager
+
+### What it does
+
+`claspalt` is a drop-in replacement for `clasp` that automatically switches to the correct Google account before running any clasp command.
+
+### Command-Line Options
 
 ```
+claspalt [OPTIONS]
+claspalt [CLASP_COMMANDS...]
+
+OPTIONS:
+  -h, --help     Show help message
+  -l, --list     List all saved accounts
+  -e, --edit     Open interactive account manager
+```
+
+### Managing Accounts
+
+**List all accounts:**
+```bash
+claspalt --list
+```
+Output:
+```
+account-personal
+account-work (activa)
+account-client
+```
+The `(activa)` marker shows which account is configured for the current project directory.
+
+**Interactive account manager:**
+```bash
+claspalt --edit
+```
+Opens a terminal UI where you can:
+- Navigate with arrow keys (↑/↓)
+- Select accounts with Space
+- Add new accounts with `A`
+- Delete selected accounts with `B`
+- Quit with `Q`
+
+```
+══════════════════════════════════════════
+       CLASPALT - Gestión de cuentas
+══════════════════════════════════════════
+
+> [ ] 1. account-personal
+  [x] 2. account-work
+  [ ] 3. account-client
+
+──────────────────────────────────────────
+  [A]ñadir   [B]orrar seleccionados   [Q]Salir
+  Espacio: seleccionar/deseleccionar
+  ↑/↓: navegar
+──────────────────────────────────────────
+```
+
+### Using claspalt with clasp commands
+
+Use `claspalt` exactly like you would use `clasp`:
+
+```bash
+claspalt push              # Push code
+claspalt pull              # Pull code
+claspalt deployments       # List deployments
+claspalt open              # Open in browser
+claspalt status            # Show status
+```
+
+### First-Time Setup
+
+When you run `claspalt` in a new project:
+
+1. You'll see a list of existing accounts (if any)
+2. Select an account number or press `N` to create a new one
+3. For new accounts:
+   - Enter a name (e.g., "work", "personal", "client-abc")
+   - Make sure the correct browser profile is active
+   - Complete the Google OAuth flow
+4. The account is saved and associated with the project
+
+### How Credentials Work
+
+```
+~/.config/claspalt/
+├── work.json           # Credentials for "work" account
+├── personal.json       # Credentials for "personal" account
+└── client-abc.json     # Credentials for "client-abc" account
+
+your-project/
+└── claspConfig.txt     # Contains: account=work, deploymentId=...
+```
+
+When you run `claspalt push`:
+1. Reads `claspConfig.txt` to find the account name
+2. Copies `~/.config/claspalt/work.json` to `~/.clasprc.json`
+3. Runs `clasp push`
+
+---
+
+## claspdeploy - Deployment Script
+
+### What it does
+
+`claspdeploy` combines `clasp push` and `clasp deploy` into a single command, managing your deployment ID automatically.
+
+### Usage
+
+```bash
 claspdeploy [OPTIONS] [DESCRIPTION]
 ```
 
 ### Options
 
-- `-h, --help` - Show help message
-- `-y, --yes` - Skip confirmation prompt (useful for CI/CD)
-- `-n, --dry-run` - Show what would be deployed without actually deploying
-- `-s, --switch-deployment` - Change deployment ID (ignores saved claspConfig.txt)
-- `-l, --log` - Enable logging to deployment.log file
+| Option | Description |
+|--------|-------------|
+| `-h, --help` | Show help message |
+| `-y, --yes` | Skip confirmation prompt |
+| `-n, --dry-run` | Preview without deploying |
+| `-s, --switch-deployment` | Change deployment ID |
+| `-l, --log` | Enable logging to deployment.log |
 
 ### Examples
 
-Basic deployment:
 ```bash
+# Basic deployment
 claspdeploy "Fixed authentication bug"
-```
 
-Deployment without confirmation:
-```bash
+# CI/CD deployment (no prompts)
 claspdeploy --yes "Automated deployment"
+
+# Preview what would happen
+claspdeploy --dry-run "Testing"
+
+# Switch to a different deployment
+claspdeploy --switch-deployment "Moving to production"
+
+# Deploy with logging
+claspdeploy --log "Version 2.0"
 ```
 
-Preview deployment without executing:
-```bash
-claspdeploy --dry-run "Testing new features"
-```
+### First Run
 
-Switch to a different deployment:
-```bash
-claspdeploy --switch-deployment "Deploying to production"
-```
-
-Deploy with logging enabled:
-```bash
-claspdeploy --log "Version 2.0 release"
-```
-
-## How it works
-
-1. **Account switching**: `claspalt` reads `claspConfig.txt` and switches to the correct Google account
-2. **First run**: Lists available deployments and prompts you to select one
-3. **Saves config**: Stores account name and deployment ID in `claspConfig.txt`
-4. **Subsequent runs**: Automatically uses the saved configuration
-5. **Pushes code** with `clasp push` before deploying
-6. **Deploys** to the saved deployment ID with your description
-
-## Migration from old format
-
-If your project has a `deploymentId.txt` file (old format), it will be automatically migrated to the new `claspConfig.txt` format on first run. You'll be prompted to select or create an account, and then:
-
-- `claspConfig.txt` is created with both the account and deployment ID
-- `deploymentId.txt` is deleted
-
-## Requirements
-
-- [clasp](https://github.com/google/clasp) installed and authenticated
-- Bash shell
-- A Google Apps Script project already configured with clasp
+On first run in a new project:
+1. Select or create a Google account
+2. View available deployments
+3. Select which deployment to use
+4. Configuration is saved to `claspConfig.txt`
 
 ---
 
-# deploy-webapp.sh
-
-A specialized deployment script for Google Apps Script web applications that maintains stable web app URLs and proper configuration.
-
-## Web App Features
-
-- **Smart deployment strategy**: Prioritizes @HEAD deployment with automatic fallback
-- **URL stability**: Maintains consistent web app URLs across updates
-- **Configuration management**: Handles `webAppId.txt` and `appsscript.json` settings
-- **Clear feedback**: Shows deployment progress and resulting URLs
-- **Error recovery**: Automatic fallback mechanisms for deployment issues
-
-## Web App Usage
-
-```bash
-# Deploy with a description
-./deploy-webapp.sh "Your description of changes"
-
-# Deploy with default description
-./deploy-webapp.sh
-```
-
-## How the Web App Script Works
-
-1. **Push code** to Google Apps Script
-2. **List current deployments** for reference
-3. **Attempt @HEAD deployment** (standard for web apps)
-4. **Fallback to saved ID** if @HEAD fails
-5. **Display web app URLs** for both domain and public access
-
 ## Configuration Files
 
-### `claspConfig.txt`
-Stores your account name and deployment ID:
-```
-account=myaccount
-deploymentId=AKfycbw...
-```
+### claspConfig.txt
 
-### `webAppId.txt`
-Stores your web app deployment ID for URL stability.
+Each project has a `claspConfig.txt` file:
 
-### `appsscript.json`
-Contains webapp configuration:
-```json
-{
-  "webapp": {
-    "access": "DOMAIN",
-    "executeAs": "USER_ACCESSING"
-  }
-}
+```
+account=work
+deploymentId=AKfycbwXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 ```
 
-## Web App Examples
+### Migration from deploymentId.txt
+
+If your project has an old `deploymentId.txt` file, it will be automatically migrated on first run:
+- You'll select an account
+- `claspConfig.txt` is created with both values
+- `deploymentId.txt` is deleted
+
+---
+
+## deploy-webapp.sh - Web App Deployment
+
+A specialized script for deploying Google Apps Script web applications.
+
+### Features
+
+- Prioritizes @HEAD deployment with automatic fallback
+- Maintains stable web app URLs
+- Displays both domain-specific and public URLs
+
+### Usage
 
 ```bash
-# Regular update
-./deploy-webapp.sh "Added new sorting options"
-
-# Quick fix
-./deploy-webapp.sh "Fixed authentication issue"
-
-# Feature release
-./deploy-webapp.sh "Version 2.0 - Export functionality"
+./deploy-webapp.sh "Description of changes"
 ```
 
-## Web App URLs
+### Web App URLs
 
-The script provides two URL formats:
-
-- **Domain-specific**: `https://script.google.com/a/macros/yourdomain.com/s/[ID]/exec`
+After deployment, you'll see:
+- **Domain**: `https://script.google.com/a/macros/yourdomain.com/s/[ID]/exec`
 - **Public**: `https://script.google.com/macros/s/[ID]/exec`
 
-## First-Time Web App Setup
+For detailed web app deployment instructions, see [DEPLOY-WEBAPP-GUIDE.md](DEPLOY-WEBAPP-GUIDE.md).
 
-If you haven't created a web app deployment:
+---
 
-1. Open the Apps Script editor
-2. Click Deploy → New deployment
-3. Choose "Web app" as the type
-4. Configure permissions
-5. Save the deployment ID to `webAppId.txt`
+## Requirements
 
-## Additional Documentation
+- [clasp](https://github.com/google/clasp) - Google's Apps Script CLI
+- Bash shell (works with macOS default bash 3.2+)
+- A Google Apps Script project configured with clasp (`.clasp.json` present)
 
-For comprehensive web app deployment information, see [DEPLOY-WEBAPP-GUIDE.md](DEPLOY-WEBAPP-GUIDE.md)
+### Installing clasp
+
+```bash
+npm install -g @google/clasp
+clasp login  # Initial login (claspalt will manage accounts after this)
+```
+
+---
+
+## Troubleshooting
+
+### "clasp no está instalado"
+Install clasp with `npm install -g @google/clasp`
+
+### Account credentials expired
+Delete the account file and recreate:
+```bash
+rm ~/.config/claspalt/accountname.json
+claspalt  # Will prompt to recreate
+```
+
+### Wrong account being used
+Check which account is configured:
+```bash
+claspalt --list
+cat claspConfig.txt
+```
+
+### Interactive editor not working
+The `--edit` option requires an interactive terminal. It won't work when piped or in non-TTY contexts.
+
+---
+
+## License
+
+MIT License - feel free to use and modify.
