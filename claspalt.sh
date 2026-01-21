@@ -44,6 +44,43 @@ check_clasp_installed() {
 } # End of function check_clasp_installed()
 
 ##
+# Checks if .clasp.json exists and has a valid configuration
+# @returns 0 if valid, 1 if missing, 2 if invalid rootDir
+##
+check_clasp_project() {
+  if [[ ! -f ".clasp.json" ]]; then
+    return 1
+  fi
+  # Check if scriptId exists
+  if ! grep -q '"scriptId"' ".clasp.json" 2>/dev/null; then
+    return 1
+  fi
+  # Check for empty rootDir (causes ENOENT: scandir '' error)
+  if grep -q '"rootDir"[[:space:]]*:[[:space:]]*""' ".clasp.json" 2>/dev/null; then
+    return 2
+  fi
+  return 0
+} # End of function check_clasp_project()
+
+##
+# Checks if the given clasp command requires a .clasp.json file
+# @param {string} $1 - The clasp command
+# @returns 0 if project is required, 1 if not
+##
+command_requires_project() {
+  local cmd="$1"
+  # Commands that don't require an existing project
+  case "$cmd" in
+    login|logout|create|clone|apis|help|version|setting|settings)
+      return 1
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+} # End of function command_requires_project()
+
+##
 # Ensures the global claspalt config directory exists with proper permissions
 ##
 ensure_config_dir() {
@@ -672,6 +709,30 @@ main() {
     echo "✅ Active account: $account"
     echo "💡 Use 'claspalt <command>' to run clasp commands"
     exit 0
+  fi
+
+  # Check if the command requires a clasp project
+  if command_requires_project "$1"; then
+    local project_status
+    check_clasp_project
+    project_status=$?
+
+    if [[ $project_status -eq 1 ]]; then
+      echo ""
+      echo "❌ No valid clasp project found in this directory."
+      echo ""
+      echo "   Missing or invalid .clasp.json file."
+      echo "   Run 'clasp clone <scriptId>' or 'clasp create' to set up a project."
+      exit 1
+    elif [[ $project_status -eq 2 ]]; then
+      echo ""
+      echo "❌ Invalid .clasp.json configuration."
+      echo ""
+      echo "   The 'rootDir' is set to an empty string, which causes clasp to fail."
+      echo "   Fix: Change \"rootDir\": \"\" to \"rootDir\": \".\" in .clasp.json"
+      echo "   Or remove the rootDir line entirely."
+      exit 1
+    fi
   fi
 
   # Run clasp with all provided arguments
