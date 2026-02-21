@@ -713,9 +713,8 @@ main() {
 
   # Check if the command requires a clasp project
   if command_requires_project "$1"; then
-    local project_status
-    check_clasp_project
-    project_status=$?
+    local project_status=0
+    check_clasp_project || project_status=$?
 
     if [[ $project_status -eq 1 ]]; then
       echo ""
