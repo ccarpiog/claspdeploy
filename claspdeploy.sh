@@ -72,7 +72,7 @@ EOF
 } # End of function show_help()
 
 ##
-# Lists all named deployments for CLI output, marking the active one with (activo).
+# Lists all named deployments for CLI output, marking the active one with (active).
 # If no deployments exist, shows an informational message.
 ##
 list_deployments_cli() {
@@ -80,15 +80,15 @@ list_deployments_cli() {
   deployments=$(list_deployments)
 
   if [[ -z "$deployments" ]]; then
-    echo "📋 No hay deployments guardados."
-    echo "   Usa 'claspdeploy --add-deployment' para agregar uno."
+    echo "📋 No saved deployments."
+    echo "   Use 'claspdeploy --add-deployment' to add one."
     return
   fi
 
   local active_name
   active_name=$(get_active_deployment_name)
 
-  echo "📋 Deployments configurados:"
+  echo "📋 Configured deployments:"
   echo ""
 
   # Print each deployment, marking the active one
@@ -96,7 +96,7 @@ list_deployments_cli() {
     local dep_id
     dep_id=$(read_config_value "deployment_${name}")
     if [[ "$name" == "$active_name" ]]; then
-      echo "  ▶ $name (activo) — $dep_id"
+      echo "  ▶ $name (active) — $dep_id"
     else
       echo "    $name — $dep_id"
     fi
@@ -115,7 +115,7 @@ prompt_deployment_selection() {
     deployments=$(list_deployments)
 
     echo "" >&2
-    echo "🚀 Selecciona un deployment:" >&2
+    echo "🚀 Select a deployment:" >&2
     echo "" >&2
 
     local count=0
@@ -132,22 +132,22 @@ prompt_deployment_selection() {
         dep_id=$(read_config_value "deployment_${name}")
         local marker=""
         if [[ "$name" == "$active_name" ]]; then
-          marker=" (activo)"
+          marker=" (active)"
         fi
         echo "  $count) $name${marker} — $dep_id" >&2
       done <<< "$deployments"
       # End of loop printing existing deployments
       echo "" >&2
     else
-      echo "  (No hay deployments guardados)" >&2
+      echo "  (No saved deployments)" >&2
       echo "" >&2
     fi
 
-    echo "  N) Crear nuevo deployment" >&2
+    echo "  N) Create new deployment" >&2
     echo "" >&2
 
     local choice
-    read -r -p "Selección (número o N): " choice
+    read -r -p "Selection (number or N): " choice
 
     if [[ "$choice" =~ ^[Nn]$ ]]; then
       add_deployment_interactive
@@ -157,7 +157,7 @@ prompt_deployment_selection() {
       echo "$selected_name"
       return
     else
-      echo "❌ Selección inválida. Inténtalo de nuevo." >&2
+      echo "❌ Invalid selection. Try again." >&2
     fi
   done
 } # End of function prompt_deployment_selection()
@@ -171,20 +171,20 @@ prompt_deployment_selection() {
 add_deployment_interactive() {
   while true; do
     echo "" >&2
-    echo "📋 Deployments disponibles en el servidor:" >&2
+    echo "📋 Available deployments on the server:" >&2
     echo "" >&2
     if ! claspalt deployments >&2; then
-      echo "❌ No se pudieron listar los deployments. Verifica la autenticación de clasp." >&2
+      echo "❌ Failed to list deployments. Please check your clasp authentication." >&2
       exit 1
     fi
     echo "" >&2
 
     # Prompt for a name
     local name
-    read -r -p "Nombre para este deployment (letras, números, guiones y guiones bajos): " name
+    read -r -p "Name for this deployment (letters, numbers, hyphens and underscores only): " name
 
     if ! validate_deployment_name "$name"; then
-      echo "❌ Nombre inválido. Usa solo letras, números, guiones y guiones bajos." >&2
+      echo "❌ Invalid name. Use only letters, numbers, hyphens and underscores." >&2
       continue
     fi
 
@@ -192,14 +192,14 @@ add_deployment_interactive() {
     local existing_id
     existing_id=$(read_config_value "deployment_${name}")
     if [[ -n "$existing_id" ]]; then
-      echo "❌ Ya existe un deployment con ese nombre." >&2
+      echo "❌ A deployment with that name already exists." >&2
       continue
     fi
 
     # Prompt for the deployment ID
     local dep_id
     echo "" >&2
-    echo "Copia y pega uno de los deployment IDs de arriba:" >&2
+    echo "Copy and paste one of the deployment IDs above:" >&2
     read -r -p "> " dep_id
 
     # Clean input
@@ -208,14 +208,14 @@ add_deployment_interactive() {
     dep_id="${dep_id%"${dep_id##*[![:space:]]}"}"
 
     if [[ -z "$dep_id" ]]; then
-      echo "❌ El deployment ID no puede estar vacío." >&2
+      echo "❌ The deployment ID cannot be empty." >&2
       continue
     fi
 
     # Save the named deployment
     save_deployment "$name" "$dep_id"
     echo "" >&2
-    echo "✅ Deployment '$name' guardado con ID: $dep_id" >&2
+    echo "✅ Deployment '$name' saved with ID: $dep_id" >&2
 
     # Only the name goes to stdout (return value)
     echo "$name"
@@ -234,16 +234,16 @@ migrate_single_deployment() {
   old_id=$(read_config_value "deploymentId")
 
   echo "" >&2
-  echo "🔄 Se encontró un deployment ID existente sin nombre: $old_id" >&2
-  echo "   El nuevo formato usa deployments con nombre para facilitar la gestión." >&2
+  echo "🔄 Found an existing deployment ID without a name: $old_id" >&2
+  echo "   The new format uses named deployments for easier management." >&2
   echo "" >&2
 
   while true; do
     local name
-    read -r -p "Asigna un nombre a este deployment (ej: produccion, staging): " name
+    read -r -p "Assign a name to this deployment (e.g.: production, staging): " name
 
     if ! validate_deployment_name "$name"; then
-      echo "❌ Nombre inválido. Usa solo letras, números, guiones y guiones bajos." >&2
+      echo "❌ Invalid name. Use only letters, numbers, hyphens and underscores." >&2
       continue
     fi
 
@@ -251,7 +251,7 @@ migrate_single_deployment() {
     local existing_id
     existing_id=$(read_config_value "deployment_${name}")
     if [[ -n "$existing_id" ]]; then
-      echo "❌ Ya existe un deployment con ese nombre." >&2
+      echo "❌ A deployment with that name already exists." >&2
       continue
     fi
 
@@ -259,7 +259,7 @@ migrate_single_deployment() {
     save_deployment "$name" "$old_id"
     set_active_deployment "$name"
     echo "" >&2
-    echo "✅ Deployment migrado: '$name' → $old_id" >&2
+    echo "✅ Deployment migrated: '$name' → $old_id" >&2
 
     # Only the name goes to stdout (return value)
     echo "$name"
@@ -276,7 +276,7 @@ delete_deployment_interactive() {
   deployments=$(list_deployments)
 
   if [[ -z "$deployments" ]]; then
-    echo "📋 No hay deployments guardados para eliminar."
+    echo "📋 No saved deployments to delete."
     return
   fi
 
@@ -284,7 +284,7 @@ delete_deployment_interactive() {
   active_name=$(get_active_deployment_name)
 
   echo ""
-  echo "📋 Deployments configurados:"
+  echo "📋 Configured deployments:"
   echo ""
 
   local count=0
@@ -297,21 +297,21 @@ delete_deployment_interactive() {
     dep_id=$(read_config_value "deployment_${name}")
     local marker=""
     if [[ "$name" == "$active_name" ]]; then
-      marker=" (activo)"
+      marker=" (active)"
     fi
     echo "  $count) $name${marker} — $dep_id"
   done <<< "$deployments"
   # End of loop printing deployments for deletion
 
   echo ""
-  echo "  0) Cancelar"
+  echo "  0) Cancel"
   echo ""
 
   local choice
-  read -r -p "Selecciona el deployment a eliminar (número): " choice
+  read -r -p "Select the deployment to delete (number): " choice
 
   if [[ "$choice" == "0" ]]; then
-    echo "❌ Operación cancelada."
+    echo "❌ Operation cancelled."
     return
   fi
 
@@ -323,20 +323,20 @@ delete_deployment_interactive() {
     # Warn if deleting the active deployment
     if [[ "$selected_name" == "$active_name" ]]; then
       echo ""
-      echo "⚠️  ATENCIÓN: Estás a punto de eliminar el deployment activo."
-      echo "   Necesitarás seleccionar otro deployment la próxima vez que despliegues."
+      echo "⚠️  WARNING: You are about to delete the active deployment."
+      echo "   You will need to select another deployment the next time you deploy."
     fi
 
     echo ""
-    read -r -p "¿Eliminar deployment '$selected_name' ($selected_id)? (s/N): " confirm
-    if [[ "$confirm" =~ ^[Ss]$ ]]; then
+    read -r -p "Delete deployment '$selected_name' ($selected_id)? (y/N): " confirm
+    if [[ "$confirm" =~ ^[Yy]$ ]]; then
       delete_deployment "$selected_name"
-      echo "✅ Deployment '$selected_name' eliminado."
+      echo "✅ Deployment '$selected_name' deleted."
     else
-      echo "❌ Operación cancelada."
+      echo "❌ Operation cancelled."
     fi
   else
-    echo "❌ Selección inválida."
+    echo "❌ Invalid selection."
   fi
 } # End of function delete_deployment_interactive()
 
@@ -379,8 +379,8 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     -*)
-      echo "❌ Opción desconocida: $1"
-      echo "Usa --help para información de uso"
+      echo "❌ Unknown option: $1"
+      echo "Use --help for usage information"
       exit 1
       ;;
     *)
@@ -400,7 +400,7 @@ fi
 
 if [[ "$ADD_DEPLOYMENT" == "true" ]]; then
   if ! is_interactive; then
-    echo "Error: --add-deployment requiere una terminal interactiva." >&2
+    echo "Error: --add-deployment requires an interactive terminal." >&2
     exit 1
   fi
   add_deployment_interactive > /dev/null
@@ -409,7 +409,7 @@ fi
 
 if [[ "$DELETE_DEPLOYMENT" == "true" ]]; then
   if ! is_interactive; then
-    echo "Error: --delete-deployment requiere una terminal interactiva." >&2
+    echo "Error: --delete-deployment requires an interactive terminal." >&2
     exit 1
   fi
   delete_deployment_interactive
@@ -464,15 +464,15 @@ if [[ "$SWITCH_DEPLOYMENT" == "true" ]]; then
   local_active_id=$(get_active_deployment_id)
 
   if [[ -n "$local_active_name" ]]; then
-    echo "🔄 Deployment activo actual: $local_active_name — $local_active_id"
+    echo "🔄 Current active deployment: $local_active_name — $local_active_id"
   elif [[ -n "$local_active_id" ]]; then
-    echo "🔄 Deployment ID actual (sin nombre): $local_active_id"
+    echo "🔄 Current deployment ID (unnamed): $local_active_id"
   fi
   echo ""
 
   # Check for interactive terminal
   if ! is_interactive; then
-    echo "Error: --switch-deployment requiere una terminal interactiva." >&2
+    echo "Error: --switch-deployment requires an interactive terminal." >&2
     exit 1
   fi
 
@@ -482,7 +482,7 @@ if [[ "$SWITCH_DEPLOYMENT" == "true" ]]; then
   DEPLOYMENT_ID=$(get_active_deployment_id)
 
   echo ""
-  echo "✅ Deployment activo cambiado a: $DEPLOYMENT_NAME"
+  echo "✅ Active deployment changed to: $DEPLOYMENT_NAME"
 else
   # --- Normal mode: resolve the active deployment ---
   DEPLOYMENT_NAME=$(get_active_deployment_name)
@@ -499,13 +499,13 @@ else
   elif [[ -z "$DEPLOYMENT_ID" ]]; then
     # No deployment ID found at all
     if ! is_interactive; then
-      echo "Error: No hay deployment configurado y se ejecuta en modo no interactivo." >&2
-      echo "Ejecuta de forma interactiva primero para configurar, o usa --yes con un proyecto preconfigurado." >&2
+      echo "Error: No deployment configured and running in non-interactive mode." >&2
+      echo "Please run interactively first to configure, or use --yes with a pre-configured project." >&2
       exit 1
     fi
 
     # No config at all — prompt to set one up
-    echo "ℹ️  No hay deployment configurado en $CONFIG_FILE."
+    echo "ℹ️  No deployment configured in $CONFIG_FILE."
     DEPLOYMENT_NAME=$(prompt_deployment_selection)
     set_active_deployment "$DEPLOYMENT_NAME"
     DEPLOYMENT_ID=$(get_active_deployment_id)
@@ -516,7 +516,7 @@ fi
 
 # Show the deployment info (name + ID when available)
 echo ""
-echo "🚀 Listo para desplegar con descripción: \"$DESC\""
+echo "🚀 Ready to deploy with description: \"$DESC\""
 if [[ -n "$DEPLOYMENT_NAME" ]]; then
   echo "   Deployment: $DEPLOYMENT_NAME — $DEPLOYMENT_ID"
 else
@@ -535,16 +535,16 @@ fi
 # Confirmation prompt (unless --yes was used)
 if [[ "$SKIP_CONFIRMATION" == "false" ]]; then
   echo ""
-  read -r -p "¿Proceder con el despliegue? [S/n] " confirm
-  confirm=${confirm:-S}  # Default to S if just Enter is pressed
-  if [[ ! "$confirm" =~ ^[SsYy]$ ]]; then
-    echo "❌ Despliegue cancelado por el usuario."
+  read -r -p "Proceed with deployment? [Y/n] " confirm
+  confirm=${confirm:-Y}  # Default to Y if just Enter is pressed
+  if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+    echo "❌ Deployment cancelled by user."
     exit 0
   fi
 fi
 
 echo ""
-echo "📦 Desplegando..."
+echo "📦 Deploying..."
 if ! DEPLOY_OUTPUT=$(claspalt deploy --deploymentId "$DEPLOYMENT_ID" --description "$DESC" 2>&1); then
   echo ""
   echo "🚨🚨🚨 DEPLOYMENT FAILED! 🚨🚨🚨"
@@ -563,7 +563,7 @@ fi
 
 echo "$DEPLOY_OUTPUT"
 echo ""
-echo "✅ ¡Despliegue exitoso!"
+echo "✅ Deployment successful!"
 
 # Construct and display the web app URL
 WEBAPP_URL="https://script.google.com/macros/s/${DEPLOYMENT_ID}/exec"

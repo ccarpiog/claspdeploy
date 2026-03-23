@@ -203,9 +203,9 @@ claspdeploy --list-deployments
 ```
 Output:
 ```
-📋 Deployments configurados:
+📋 Configured deployments:
 
-  ▶ prod (activo) — AKfycbwXXXXXXXXXXXXXXXX
+  ▶ prod (active) — AKfycbwXXXXXXXXXXXXXXXX
     dev — AKfycbwYYYYYYYYYYYYYYYYYY
 ```
 
