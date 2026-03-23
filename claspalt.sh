@@ -724,13 +724,14 @@ main() {
       echo "   Run 'clasp clone <scriptId>' or 'clasp create' to set up a project."
       exit 1
     elif [[ $project_status -eq 2 ]]; then
+      # Auto-fix empty rootDir to "." using a temp file for Bash 3.2 compatibility
       echo ""
-      echo "❌ Invalid .clasp.json configuration."
-      echo ""
-      echo "   The 'rootDir' is set to an empty string, which causes clasp to fail."
-      echo "   Fix: Change \"rootDir\": \"\" to \"rootDir\": \".\" in .clasp.json"
-      echo "   Or remove the rootDir line entirely."
-      exit 1
+      echo "⚠️  .clasp.json has an empty rootDir (causes clasp to fail). Fixing to \".\"..."
+      local temp_file
+      temp_file=$(mktemp ".clasp.json.XXXXXX")
+      sed 's/"rootDir"[[:space:]]*:[[:space:]]*""/"rootDir": "."/' ".clasp.json" > "$temp_file"
+      mv "$temp_file" ".clasp.json"
+      echo "✅ .clasp.json updated."
     fi
   fi
 
