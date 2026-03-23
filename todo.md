@@ -1,31 +1,10 @@
-## DONE: Named deployment support (2026-03-23)
+## ~~Deployment selection prompt on every run~~ ✅ DONE
 
-**Original request:** claspdeploy should support multiple named deployment IDs (like claspalt does for accounts), so users can easily switch between production and development deployments.
+Implemented: interactive deployment selection prompt shown after push, before deploy.
 
-**What was implemented:**
-
-### lib/common.sh — 7 new functions
-- `validate_deployment_name()` — validates name characters
-- `list_deployments()` — lists all named deployments from config
-- `get_active_deployment_name()` / `get_active_deployment_id()` — resolve active deployment
-- `save_deployment()` / `set_active_deployment()` / `delete_deployment()` — CRUD for named deployments
-
-### claspdeploy.sh — new CLI flags and functions
-- `--list-deployments` / `-ld` — list all named deployments, marking the active one
-- `--add-deployment` / `-a` — interactively add a new named deployment
-- `--delete-deployment` / `-dd` — interactively delete a named deployment
-- `--switch-deployment` / `-s` — enhanced to work with named deployments
-
-### Config format (claspConfig.txt)
-```
-account=work
-activeDeployment=prod
-deployment_prod=AKfycbwXXXX
-deployment_dev=AKfycbwYYYY
-deploymentId=AKfycbwXXXX    # backward compat mirror
-```
-
-### Backward compatibility
-- Old projects with just `deploymentId=` continue to work
-- Interactive migration prompts user to name the existing deployment
-- `deploymentId` key is kept in sync as a mirror for any external tools
+- `prompt_deploy_action()` shows Enter/S/N options depending on state (active deployment, no active, no deployments)
+- `create_new_deployment()` creates a server-side deployment via `claspalt deploy`, parses the ID, and prompts for a name
+- `--yes` and non-interactive mode skip the prompt and use the active deployment silently
+- `--dry-run` blocks the N (create new) option to prevent server-side side effects
+- Removed `--switch-deployment` and `--add-deployment` flags (replaced by in-flow prompt)
+- Kept `--list-deployments` and `--delete-deployment` as standalone utility commands

@@ -166,12 +166,10 @@ claspdeploy [OPTIONS] [DESCRIPTION]
 | Option | Description |
 |--------|-------------|
 | `-h, --help` | Show help message |
-| `-y, --yes` | Skip confirmation prompt |
+| `-y, --yes` | Skip confirmation and deployment selection prompts (for CI/CD) |
 | `-n, --dry-run` | Preview without deploying |
-| `-s, --switch-deployment` | Switch to a different named deployment |
 | `-l, --log` | Enable logging to deployment.log |
 | `-ld, --list-deployments` | List all named deployments for this project |
-| `-a, --add-deployment` | Add a new named deployment |
 | `-dd, --delete-deployment` | Delete a named deployment |
 
 ### Examples
@@ -192,26 +190,21 @@ claspdeploy --log "Version 2.0"
 
 ### Managing Named Deployments
 
-You can store multiple named deployment IDs per project and switch between them:
+You can store multiple named deployment IDs per project. During each interactive deploy, you are prompted to select, switch, or create a deployment:
+
+```
+🚀 Deployment activo: prod — AKfycbwXXXXXXXXXXXXXXXX
+
+Pulsa Enter para usar el deployment actual, S para seleccionar otro, N para crear uno nuevo:
+```
+
+- **Enter** — deploy using the active deployment
+- **S** — open a selection menu to pick or register a deployment
+- **N** — create a new deployment on the server and name it
 
 ```bash
-# Add named deployments
-claspdeploy --add-deployment    # Prompts for name ("prod", "dev", etc.) and ID
-
 # List all named deployments
 claspdeploy --list-deployments
-```
-Output:
-```
-📋 Configured deployments:
-
-  ▶ prod (active) — AKfycbwXXXXXXXXXXXXXXXX
-    dev — AKfycbwYYYYYYYYYYYYYYYYYY
-```
-
-```bash
-# Switch active deployment
-claspdeploy --switch-deployment
 
 # Delete a named deployment
 claspdeploy --delete-deployment
