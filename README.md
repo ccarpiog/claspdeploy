@@ -15,7 +15,7 @@ If you work with multiple Google Apps Script projects across different Google ac
 | Script | Description |
 |--------|-------------|
 | `claspalt` | Multi-account credential manager - use instead of `clasp` |
-| `claspdeploy` | Deployment script with persistent deployment ID management |
+| `claspdeploy` | Deployment script with named deployment management |
 
 ## Quick Start
 
@@ -151,9 +151,9 @@ When you run `claspalt push`:
 
 When you run `clasp deploy`, it creates a new deployment with a new URL. But during development, you want to test with a consistent URL that you can bookmark or share. `claspdeploy` saves your deployment ID and reuses it on every deploy, so your web app URL stays the same after each `clasp push`.
 
-**Main use case**: Reusing a deployment ID easily from the command line so you can keep the same URL for testing after every `clasp push`.
+**Main use case**: Managing multiple named deployments (e.g., production and development) so you can keep stable URLs and switch between them easily.
 
-`claspdeploy` combines `clasp push` and `clasp deploy` into a single command, managing your deployment ID automatically.
+`claspdeploy` combines `clasp push` and `clasp deploy` into a single command, managing your deployment IDs automatically.
 
 ### Usage
 
@@ -168,8 +168,11 @@ claspdeploy [OPTIONS] [DESCRIPTION]
 | `-h, --help` | Show help message |
 | `-y, --yes` | Skip confirmation prompt |
 | `-n, --dry-run` | Preview without deploying |
-| `-s, --switch-deployment` | Change deployment ID |
+| `-s, --switch-deployment` | Switch to a different named deployment |
 | `-l, --log` | Enable logging to deployment.log |
+| `-ld, --list-deployments` | List all named deployments for this project |
+| `-a, --add-deployment` | Add a new named deployment |
+| `-dd, --delete-deployment` | Delete a named deployment |
 
 ### Examples
 
@@ -183,19 +186,43 @@ claspdeploy --yes "Automated deployment"
 # Preview what would happen
 claspdeploy --dry-run "Testing"
 
-# Switch to a different deployment
-claspdeploy --switch-deployment "Moving to production"
-
 # Deploy with logging
 claspdeploy --log "Version 2.0"
+```
+
+### Managing Named Deployments
+
+You can store multiple named deployment IDs per project and switch between them:
+
+```bash
+# Add named deployments
+claspdeploy --add-deployment    # Prompts for name ("prod", "dev", etc.) and ID
+
+# List all named deployments
+claspdeploy --list-deployments
+```
+Output:
+```
+📋 Deployments configurados:
+
+  ▶ prod (activo) — AKfycbwXXXXXXXXXXXXXXXX
+    dev — AKfycbwYYYYYYYYYYYYYYYYYY
+```
+
+```bash
+# Switch active deployment
+claspdeploy --switch-deployment
+
+# Delete a named deployment
+claspdeploy --delete-deployment
 ```
 
 ### First Run
 
 On first run in a new project:
-1. Select or create a Google account
-2. View available deployments
-3. Select which deployment to use
+1. Select or create a Google account (via claspalt)
+2. View available deployments from the server
+3. Name and select a deployment to use
 4. Configuration is saved to `claspConfig.txt`
 
 ---
@@ -208,12 +235,21 @@ Each project has a `claspConfig.txt` file:
 
 ```
 account=work
+activeDeployment=prod
+deployment_prod=AKfycbwXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+deployment_dev=AKfycbwYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY
 deploymentId=AKfycbwXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 ```
 
-### Migration from deploymentId.txt
+- `activeDeployment` — name of the currently active deployment
+- `deployment_{name}` — named deployment ID entries
+- `deploymentId` — backward-compatible mirror of the active deployment's ID
 
-If your project has an old `deploymentId.txt` file, it will be automatically migrated on first run:
+### Migration from old formats
+
+**From single `deploymentId`**: If your project has only a `deploymentId=` entry (no named deployments), you'll be prompted to assign it a name on first interactive run.
+
+**From `deploymentId.txt`**: If your project has an old `deploymentId.txt` file, it will be automatically migrated on first run:
 - You'll select an account
 - `claspConfig.txt` is created with both values
 - `deploymentId.txt` is deleted
