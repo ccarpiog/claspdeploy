@@ -620,6 +620,72 @@ echo "✅ Files sent correctly"
 echo ""
 
 # ============================================================================
+# Web App Manifest Safety Check
+# ============================================================================
+# clasp deploy --deploymentId can silently convert a Web app into a Library
+# if appsscript.json lacks a "webapp" section. Check before deploying.
+
+# Use if/else to capture exit code safely under set -e
+if check_webapp_manifest; then
+  WEBAPP_CHECK=0
+else
+  WEBAPP_CHECK=$?
+fi
+
+# Also warn if .claspignore excludes appsscript.json from being pushed
+if [[ -f ".claspignore" ]] && grep -q "appsscript.json" ".claspignore" 2>/dev/null; then
+  echo ""
+  echo "⚠️  WARNING: .claspignore appears to exclude appsscript.json"
+  echo "   This means your local manifest may not be pushed to the server,"
+  echo "   even if it contains webapp config locally."
+  echo ""
+fi
+
+if [[ "$WEBAPP_CHECK" -eq 1 ]]; then
+  echo ""
+  echo "🚨🚨🚨 WARNING 🚨🚨🚨"
+  echo "⚠️  appsscript.json not found at: $(get_manifest_path)"
+  echo "   Without a manifest, clasp may change your deployment type."
+  echo ""
+  if is_interactive && [[ "$SKIP_CONFIRMATION" == "false" ]]; then
+    read -r -p "Continue anyway? This may convert your Web app to a Library. [y/N] " webapp_confirm
+    if [[ ! "$webapp_confirm" =~ ^[Yy]$ ]]; then
+      echo "❌ Deployment cancelled. Add appsscript.json with a webapp section first."
+      exit 1
+    fi
+  else
+    echo "❌ Cannot deploy safely in non-interactive mode without webapp manifest."
+    echo "   Add a \"webapp\" section to appsscript.json first. Example:"
+    echo '   { "webapp": { "access": "ANYONE", "executeAs": "USER_DEPLOYING" } }'
+    exit 1
+  fi
+elif [[ "$WEBAPP_CHECK" -eq 2 ]]; then
+  echo ""
+  echo "🚨🚨🚨 WARNING 🚨🚨🚨"
+  echo "⚠️  appsscript.json does NOT contain a \"webapp\" section."
+  echo "   This is a known clasp bug: deploying without webapp config can silently"
+  echo "   convert your Web app deployment into a Library, breaking your URL."
+  echo ""
+  echo "   To fix, add this to appsscript.json:"
+  echo '   "webapp": { "access": "ANYONE", "executeAs": "USER_DEPLOYING" }'
+  echo ""
+  echo "   Valid access values: MYSELF, DOMAIN, ANYONE, ANYONE_ANONYMOUS"
+  echo "   Valid executeAs values: USER_ACCESSING, USER_DEPLOYING"
+  echo ""
+  if is_interactive && [[ "$SKIP_CONFIRMATION" == "false" ]]; then
+    read -r -p "Continue anyway? This may convert your Web app to a Library. [y/N] " webapp_confirm
+    if [[ ! "$webapp_confirm" =~ ^[Yy]$ ]]; then
+      echo "❌ Deployment cancelled. Fix appsscript.json first."
+      exit 1
+    fi
+  else
+    echo "❌ Cannot deploy safely in non-interactive mode without webapp config."
+    exit 1
+  fi
+fi
+# End of Web App Manifest Safety Check
+
+# ============================================================================
 # Deployment ID Resolution
 # ============================================================================
 

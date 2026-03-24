@@ -89,6 +89,46 @@ validate_deployment_name() {
 } # End of function validate_deployment_name()
 
 ##
+# Resolves the path to appsscript.json by reading rootDir from .clasp.json.
+# Falls back to ./appsscript.json if .clasp.json is missing or has no rootDir.
+# @returns The resolved path via echo (stdout)
+##
+get_manifest_path() {
+  local root_dir="."
+  if [[ -f ".clasp.json" ]]; then
+    # Extract rootDir value using grep+sed for Bash 3.2 compatibility (no jq dependency)
+    local extracted
+    extracted=$(sed -n 's/^[[:space:]]*"rootDir"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' ".clasp.json" 2>/dev/null | head -1 | tr -d '\r' || true)
+    if [[ -n "$extracted" ]]; then
+      root_dir="$extracted"
+    fi
+  fi
+  echo "${root_dir}/appsscript.json"
+} # End of function get_manifest_path()
+
+##
+# Checks that appsscript.json contains a "webapp" configuration block.
+# This is critical to prevent clasp deploy from silently converting a Web app
+# deployment into a Library (a known clasp bug where the deployment type is
+# not preserved when the manifest lacks webapp config).
+# @returns 0 if webapp config is present, 1 if manifest is missing, 2 if webapp key is missing
+##
+check_webapp_manifest() {
+  local manifest_path
+  manifest_path=$(get_manifest_path)
+
+  if [[ ! -f "$manifest_path" ]]; then
+    return 1
+  fi
+
+  if grep -Eq '^[[:space:]]*"webapp"[[:space:]]*:' "$manifest_path" 2>/dev/null; then
+    return 0
+  else
+    return 2
+  fi
+} # End of function check_webapp_manifest()
+
+##
 # Lists all named deployments from claspConfig.txt
 # Outputs one deployment name per line, sorted alphabetically
 # No output if none found
