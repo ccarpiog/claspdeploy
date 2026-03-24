@@ -77,8 +77,8 @@ list_deployments_cli() {
   deployments=$(list_deployments)
 
   if [[ -z "$deployments" ]]; then
-    echo "📋 No hay deployments guardados."
-    echo "   Ejecuta 'claspdeploy' de forma interactiva para crear uno."
+    echo "📋 No saved deployments."
+    echo "   Run 'claspdeploy' interactively to create one."
     return
   fi
 
@@ -229,12 +229,12 @@ add_deployment_interactive() {
 ##
 create_new_deployment() {
   echo "" >&2
-  echo "🆕 Creando un nuevo deployment en el servidor..." >&2
+  echo "🆕 Creating a new deployment on the server..." >&2
   echo "" >&2
 
   local deploy_output
   if ! deploy_output=$(claspalt deploy 2>&1); then
-    echo "❌ Error al crear el deployment." >&2
+    echo "❌ Failed to create the deployment." >&2
     echo "$deploy_output" >&2
     return 1
   fi
@@ -252,20 +252,20 @@ create_new_deployment() {
   fi
 
   if [[ -z "$dep_id" ]]; then
-    echo "❌ No se pudo extraer el ID del deployment de la salida de clasp." >&2
+    echo "❌ Could not extract the deployment ID from clasp output." >&2
     return 1
   fi
 
-  echo "✅ Nuevo deployment creado: $dep_id" >&2
+  echo "✅ New deployment created: $dep_id" >&2
   echo "" >&2
 
   # Prompt user to name the new deployment
   while true; do
     local name
-    read -r -p "Nombre para este deployment (letras, números, guiones y guiones bajos): " name
+    read -r -p "Name for this deployment (letters, numbers, hyphens and underscores only): " name
 
     if ! validate_deployment_name "$name"; then
-      echo "❌ Nombre inválido. Usa solo letras, números, guiones y guiones bajos." >&2
+      echo "❌ Invalid name. Use only letters, numbers, hyphens and underscores." >&2
       continue
     fi
 
@@ -273,7 +273,7 @@ create_new_deployment() {
     local existing_id
     existing_id=$(read_config_value "deployment_${name}")
     if [[ -n "$existing_id" ]]; then
-      echo "❌ Ya existe un deployment con ese nombre." >&2
+      echo "❌ A deployment with that name already exists." >&2
       continue
     fi
 
@@ -281,7 +281,7 @@ create_new_deployment() {
     save_deployment "$name" "$dep_id"
     set_active_deployment "$name"
     echo "" >&2
-    echo "✅ Deployment '$name' guardado con ID: $dep_id" >&2
+    echo "✅ Deployment '$name' saved with ID: $dep_id" >&2
 
     # Only the name goes to stdout (return value)
     echo "$name"
@@ -310,10 +310,10 @@ prompt_deploy_action() {
 
     if [[ -n "$active_name" ]] && [[ -n "$active_id" ]]; then
       # There IS an active deployment
-      echo "🚀 Deployment activo: $active_name — $active_id" >&2
+      echo "🚀 Active deployment: $active_name — $active_id" >&2
       echo "" >&2
       local choice
-      read -r -p "Pulsa Enter para usar el deployment actual, S para seleccionar otro, N para crear uno nuevo: " choice
+      read -r -p "Press Enter to use the current deployment, S to select another, N to create a new one: " choice
 
       if [[ -z "$choice" ]]; then
         # Enter pressed — use active deployment
@@ -329,26 +329,26 @@ prompt_deploy_action() {
       elif [[ "$choice" =~ ^[Nn]$ ]]; then
         # Create new deployment (blocked in dry-run mode)
         if [[ "$DRY_RUN" == "true" ]]; then
-          echo "❌ No se puede crear un deployment en modo dry-run." >&2
+          echo "❌ Cannot create a deployment in dry-run mode." >&2
           continue
         fi
         local new_name
         if ! new_name=$(create_new_deployment); then
-          echo "❌ No se pudo crear el deployment. Inténtalo de nuevo." >&2
+          echo "❌ Failed to create the deployment. Try again." >&2
           continue
         fi
         echo "$new_name"
         return
       else
-        echo "❌ Opción no válida. Inténtalo de nuevo." >&2
+        echo "❌ Invalid option. Try again." >&2
       fi
 
     elif [[ -n "$deployments" ]]; then
       # No active deployment, but deployments exist
-      echo "⚠️  No hay deployment activo configurado." >&2
+      echo "⚠️  No active deployment configured." >&2
       echo "" >&2
       local choice
-      read -r -p "Pulsa S para seleccionar un deployment, N para crear uno nuevo: " choice
+      read -r -p "Press S to select a deployment, N to create a new one: " choice
 
       if [[ "$choice" =~ ^[Ss]$ ]]; then
         local selected_name
@@ -358,37 +358,37 @@ prompt_deploy_action() {
         return
       elif [[ "$choice" =~ ^[Nn]$ ]]; then
         if [[ "$DRY_RUN" == "true" ]]; then
-          echo "❌ No se puede crear un deployment en modo dry-run." >&2
+          echo "❌ Cannot create a deployment in dry-run mode." >&2
           continue
         fi
         local new_name
         if ! new_name=$(create_new_deployment); then
-          echo "❌ No se pudo crear el deployment. Inténtalo de nuevo." >&2
+          echo "❌ Failed to create the deployment. Try again." >&2
           continue
         fi
         echo "$new_name"
         return
       elif [[ -z "$choice" ]]; then
-        echo "❌ No hay deployment activo. Selecciona o crea uno." >&2
+        echo "❌ No active deployment. Select or create one." >&2
       else
-        echo "❌ Opción no válida. Inténtalo de nuevo." >&2
+        echo "❌ Invalid option. Try again." >&2
       fi
 
     else
       # No deployments at all
-      echo "⚠️  No hay deployments configurados." >&2
+      echo "⚠️  No deployments configured." >&2
       echo "" >&2
       local choice
-      read -r -p "Pulsa N para crear un nuevo deployment, S para registrar uno existente: " choice
+      read -r -p "Press N to create a new deployment, S to register an existing one: " choice
 
       if [[ "$choice" =~ ^[Nn]$ ]]; then
         if [[ "$DRY_RUN" == "true" ]]; then
-          echo "❌ No se puede crear un deployment en modo dry-run." >&2
+          echo "❌ Cannot create a deployment in dry-run mode." >&2
           continue
         fi
         local new_name
         if ! new_name=$(create_new_deployment); then
-          echo "❌ No se pudo crear el deployment. Inténtalo de nuevo." >&2
+          echo "❌ Failed to create the deployment. Try again." >&2
           continue
         fi
         echo "$new_name"
@@ -400,9 +400,9 @@ prompt_deploy_action() {
         echo "$selected_name"
         return
       elif [[ -z "$choice" ]]; then
-        echo "❌ No hay deployments. Crea o registra uno." >&2
+        echo "❌ No deployments found. Create or register one." >&2
       else
-        echo "❌ Opción no válida. Inténtalo de nuevo." >&2
+        echo "❌ Invalid option. Try again." >&2
       fi
     fi
   done
@@ -717,8 +717,8 @@ else
   DEPLOYMENT_NAME=$(get_active_deployment_name)
   DEPLOYMENT_ID=$(get_active_deployment_id)
   if [[ -z "$DEPLOYMENT_ID" ]]; then
-    echo "Error: No hay deployment configurado y el modo es no interactivo." >&2
-    echo "Ejecuta de forma interactiva primero para configurar, o usa --yes con un proyecto ya configurado." >&2
+    echo "Error: No deployment configured and running in non-interactive mode." >&2
+    echo "Run interactively first to configure, or use --yes with an already configured project." >&2
     exit 1
   fi
 fi
