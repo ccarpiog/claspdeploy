@@ -1,4 +1,4 @@
-# claspdeploy
+# claspalt and claspdeploy
 
 A collection of bash scripts that simplify deploying Google Apps Script projects using clasp. Includes multi-account credential management for seamlessly switching between Google accounts without repeated logins.
 
