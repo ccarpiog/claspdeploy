@@ -45,7 +45,7 @@ check_clasp_installed() {
 
 ##
 # Checks if .clasp.json exists and has a valid configuration
-# @returns 0 if valid, 1 if missing, 2 if invalid rootDir
+# @returns 0 if valid, 1 if missing, 2 if empty rootDir, 3 if rootDir not found
 ##
 check_clasp_project() {
   if [[ ! -f ".clasp.json" ]]; then
@@ -58,6 +58,13 @@ check_clasp_project() {
   # Check for empty rootDir (causes ENOENT: scandir '' error)
   if grep -q '"rootDir"[[:space:]]*:[[:space:]]*""' ".clasp.json" 2>/dev/null; then
     return 2
+  fi
+  # Check that a non-empty rootDir points to an existing directory.
+  # Otherwise clasp pushes nothing and misleadingly reports "already up to date".
+  local root_dir
+  root_dir=$(get_root_dir)
+  if [[ -n "$root_dir" && ! -d "$root_dir" ]]; then
+    return 3
   fi
   return 0
 } # End of function check_clasp_project()
@@ -732,6 +739,16 @@ main() {
       sed 's/"rootDir"[[:space:]]*:[[:space:]]*""/"rootDir": "."/' ".clasp.json" > "$temp_file"
       mv "$temp_file" ".clasp.json"
       echo "✅ .clasp.json updated."
+    elif [[ $project_status -eq 3 ]]; then
+      local root_dir
+      root_dir=$(get_root_dir)
+      echo ""
+      echo "❌ rootDir not found: $root_dir"
+      echo ""
+      echo "   The 'rootDir' in .clasp.json points to a directory that does not exist."
+      echo "   It may have been renamed, moved, or deleted."
+      echo "   Fix the 'rootDir' value in .clasp.json, then try again."
+      exit 1
     fi
   fi
 

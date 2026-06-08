@@ -89,19 +89,28 @@ validate_deployment_name() {
 } # End of function validate_deployment_name()
 
 ##
+# Reads the rootDir value from .clasp.json.
+# Uses sed for Bash 3.2 compatibility (no jq dependency).
+# @returns The rootDir value via echo (stdout), or empty string if absent
+##
+get_root_dir() {
+  if [[ -f ".clasp.json" ]]; then
+    # Match "rootDir" anywhere on a line so both pretty-printed and compact
+    # (single-line) .clasp.json files are handled.
+    sed -n 's/.*"rootDir"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' ".clasp.json" 2>/dev/null | head -1 | tr -d '\r' || true
+  fi
+} # End of function get_root_dir()
+
+##
 # Resolves the path to appsscript.json by reading rootDir from .clasp.json.
 # Falls back to ./appsscript.json if .clasp.json is missing or has no rootDir.
 # @returns The resolved path via echo (stdout)
 ##
 get_manifest_path() {
-  local root_dir="."
-  if [[ -f ".clasp.json" ]]; then
-    # Extract rootDir value using grep+sed for Bash 3.2 compatibility (no jq dependency)
-    local extracted
-    extracted=$(sed -n 's/^[[:space:]]*"rootDir"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' ".clasp.json" 2>/dev/null | head -1 | tr -d '\r' || true)
-    if [[ -n "$extracted" ]]; then
-      root_dir="$extracted"
-    fi
+  local root_dir
+  root_dir=$(get_root_dir)
+  if [[ -z "$root_dir" ]]; then
+    root_dir="."
   fi
   echo "${root_dir}/appsscript.json"
 } # End of function get_manifest_path()
