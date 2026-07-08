@@ -28,6 +28,9 @@ SKIP_CONFIRMATION=false
 ENABLE_LOGGING=false
 LIST_DEPLOYMENTS=false
 DELETE_DEPLOYMENT=false
+ALL_DEPLOYMENTS=false
+EDIT_DEPLOY_SET=false
+TARGET_DEPLOYMENT=""
 DESC=""
 
 # ============================================================================
@@ -52,14 +55,26 @@ OPTIONS:
   -y, --yes                 Skip confirmation prompt and deployment selection (for CI/CD)
   -n, --dry-run             Show what would be deployed without actually deploying
   -l, --log                 Enable logging to deployment.log file
+  -D, --deployment NAME     Deploy a specific named deployment (unambiguous target)
+  --all                     Deploy every deployment in the saved deploy set, in order
+  --deploy-set              Edit which deployments belong to the '--all' set
   -ld, --list-deployments   List all named deployments for this project
   -dd, --delete-deployment  Delete a named deployment
 
 DESCRIPTION:
   Optional deployment description. Defaults to "New version" if not provided.
 
+ACCESS-MANAGED DEPLOYMENTS:
+  A deployment can store its own web app access model (access + executeAs). Before
+  deploying such a deployment, claspdeploy regenerates the appsscript.json webapp
+  block to match, then restores your manifest afterwards. This lets one script back
+  several deployments with DIFFERENT access models (e.g. a public form + a
+  domain-restricted admin panel) without ever changing them by accident.
+
 EXAMPLES:
   claspdeploy "Fixed bug in user authentication"
+  claspdeploy --deployment admin "Admin panel update"
+  claspdeploy --all "Release to parent form + admin panel"
   claspdeploy --yes "Automated deployment"
   claspdeploy --dry-run "Test changes"
   claspdeploy --list-deployments
@@ -88,16 +103,38 @@ list_deployments_cli() {
   echo "📋 Configured deployments:"
   echo ""
 
-  # Print each deployment, marking the active one
+  # Print each deployment, marking the active one, its access model, and set membership
   while IFS= read -r name; do
     local dep_id
     dep_id=$(read_config_value "deployment_${name}")
-    if [[ "$name" == "$active_name" ]]; then
-      echo "  ▶ $name (active) — $dep_id"
-    else
-      echo "    $name — $dep_id"
+
+    local model="no access model (deploys as-is)"
+    if is_access_managed "$name"; then
+      model="$(get_deployment_access "$name") / $(get_deployment_execute_as "$name")"
     fi
+
+    local in_set=""
+    if is_in_deploy_set "$name"; then
+      in_set=" [in --all set]"
+    fi
+
+    if [[ "$name" == "$active_name" ]]; then
+      echo "  ▶ $name (active) — $dep_id${in_set}"
+    else
+      echo "    $name — $dep_id${in_set}"
+    fi
+    echo "      access: $model"
   done <<< "$deployments"
+  # End of loop printing each configured deployment
+
+  local set_csv
+  set_csv=$(get_deploy_set)
+  echo ""
+  if [[ -n "$set_csv" ]]; then
+    echo "🚀 Deploy set (--all): $set_csv"
+  else
+    echo "🚀 Deploy set (--all): (empty — run 'claspdeploy --deploy-set')"
+  fi
 } # End of function list_deployments_cli()
 
 ##
@@ -214,6 +251,14 @@ add_deployment_interactive() {
     echo "" >&2
     echo "✅ Deployment '$name' saved with ID: $dep_id" >&2
 
+    # Offer to capture the deployment's access model now (the UI-first workflow:
+    # create + configure in the Apps Script UI, then register + capture here).
+    local set_model
+    read -r -p "Set this deployment's web app access model now? [y/N] " set_model
+    if [[ "$set_model" =~ ^[Yy]$ ]]; then
+      capture_access_model_interactive "$name"
+    fi
+
     # Only the name goes to stdout (return value)
     echo "$name"
     return
@@ -231,6 +276,14 @@ create_new_deployment() {
   echo "" >&2
   echo "🆕 Creating a new deployment on the server..." >&2
   echo "" >&2
+
+  # Push current code first so the new deployment is minted from fresh content
+  # (the single-deploy path no longer pushes before resolution).
+  echo "📤 Pushing current files first..." >&2
+  if ! claspalt push >&2; then
+    echo "❌ Push failed; cannot create a new deployment." >&2
+    return 1
+  fi
 
   local deploy_output
   if ! deploy_output=$(claspalt deploy 2>&1); then
@@ -282,6 +335,14 @@ create_new_deployment() {
     set_active_deployment "$name"
     echo "" >&2
     echo "✅ Deployment '$name' saved with ID: $dep_id" >&2
+
+    # Offer to capture the deployment's access model now. If set, the deploy that
+    # follows will regenerate the manifest and apply it to this new deployment.
+    local set_model
+    read -r -p "Set this deployment's web app access model now? [y/N] " set_model
+    if [[ "$set_model" =~ ^[Yy]$ ]]; then
+      capture_access_model_interactive "$name"
+    fi
 
     # Only the name goes to stdout (return value)
     echo "$name"
@@ -526,6 +587,453 @@ delete_deployment_interactive() {
   fi
 } # End of function delete_deployment_interactive()
 
+##
+# Interactively captures a deployment's web app access model and stores it.
+# The user reads the values from the Apps Script "Manage deployments" dialog.
+# This is the Phase-1 "guided confirm" capture (Tier 1 in the implementation plan).
+# All UI goes to stderr so this is safe to call from command-substituted callers.
+# @param {string} $1 - Deployment name
+##
+capture_access_model_interactive() {
+  local name="$1"
+
+  echo "" >&2
+  echo "🔐 Set the access model for deployment '$name'." >&2
+  echo "   Read the current values from the Apps Script editor:" >&2
+  echo "   Deploy → Manage deployments → (gear icon) → Web app." >&2
+  echo "" >&2
+
+  local access=""
+  while true; do
+    echo "  Who has access:" >&2
+    echo "    1) ANYONE_ANONYMOUS  (public, no sign-in)" >&2
+    echo "    2) ANYONE            (public, requires Google sign-in)" >&2
+    echo "    3) DOMAIN            (Google Workspace domain only)" >&2
+    echo "    4) MYSELF            (only the deploying user)" >&2
+    local a
+    read -r -p "  Selection [1-4]: " a
+    case "$a" in
+      1) access="ANYONE_ANONYMOUS"; break ;;
+      2) access="ANYONE"; break ;;
+      3) access="DOMAIN"; break ;;
+      4) access="MYSELF"; break ;;
+      *) echo "  ❌ Invalid selection. Try again." >&2 ;;
+    esac
+  done
+  # End of loop prompting for the access value
+
+  local execute_as=""
+  while true; do
+    echo "" >&2
+    echo "  Execute as:" >&2
+    echo "    1) USER_DEPLOYING   (runs as you — usual when the app reads shared data)" >&2
+    echo "    2) USER_ACCESSING   (runs as the signed-in visitor)" >&2
+    local e
+    read -r -p "  Selection [1-2]: " e
+    case "$e" in
+      1) execute_as="USER_DEPLOYING"; break ;;
+      2) execute_as="USER_ACCESSING"; break ;;
+      *) echo "  ❌ Invalid selection. Try again." >&2 ;;
+    esac
+  done
+  # End of loop prompting for the executeAs value
+
+  set_deployment_access_model "$name" "$access" "$execute_as"
+  echo "" >&2
+  echo "✅ Access model saved for '$name': $access / $execute_as" >&2
+} # End of function capture_access_model_interactive()
+
+##
+# Interactive editor for the saved deploy set (the deployments '--all' deploys).
+# Uses a numbered toggle list (Bash 3.2 compatible, no raw terminal mode).
+# After saving, offers to capture an access model for any selected deployment
+# that does not have one yet.
+##
+prompt_deploy_set() {
+  local deployments
+  deployments=$(list_deployments)
+
+  if [[ -z "$deployments" ]]; then
+    echo "📋 No deployments exist yet. Register or create one first, then build a set."
+    return
+  fi
+
+  local dep_array=()
+  local sel_array=()
+  local name
+  while IFS= read -r name; do
+    dep_array+=("$name")
+    if is_in_deploy_set "$name"; then
+      sel_array+=(1)
+    else
+      sel_array+=(0)
+    fi
+  done <<< "$deployments"
+  # End of loop seeding the selection from the current deploy set
+
+  while true; do
+    echo ""
+    echo "🚀 Select deployments for '--all' (the deploy set):"
+    echo ""
+    local i=0
+    while [[ $i -lt ${#dep_array[@]} ]]; do
+      local box="[ ]"
+      [[ ${sel_array[$i]} -eq 1 ]] && box="[x]"
+      local model=""
+      if is_access_managed "${dep_array[$i]}"; then
+        model=" — $(get_deployment_access "${dep_array[$i]}")/$(get_deployment_execute_as "${dep_array[$i]}")"
+      fi
+      echo "  $((i + 1))) ${box} ${dep_array[$i]}${model}"
+      i=$((i + 1))
+    done
+    # End of loop rendering the toggle list
+    echo ""
+    echo "  Type a number to toggle · 'a' all · 'n' none · 'd' done · 'c' cancel"
+    local choice
+    read -r -p "  > " choice
+
+    if [[ "$choice" =~ ^[Dd]$ ]]; then
+      break
+    elif [[ "$choice" =~ ^[Cc]$ ]]; then
+      echo "❌ Deploy set unchanged."
+      return
+    elif [[ "$choice" =~ ^[Aa]$ ]]; then
+      i=0
+      while [[ $i -lt ${#sel_array[@]} ]]; do sel_array[$i]=1; i=$((i + 1)); done
+    elif [[ "$choice" =~ ^[Nn]$ ]]; then
+      i=0
+      while [[ $i -lt ${#sel_array[@]} ]]; do sel_array[$i]=0; i=$((i + 1)); done
+    elif [[ "$choice" =~ ^[0-9]+$ ]]; then
+      if [[ "$choice" -ge 1 ]] && [[ "$choice" -le ${#dep_array[@]} ]]; then
+        local idx=$((choice - 1))
+        if [[ ${sel_array[$idx]} -eq 1 ]]; then
+          sel_array[$idx]=0
+        else
+          sel_array[$idx]=1
+        fi
+      else
+        echo "  ❌ Out of range."
+      fi
+    else
+      echo "  ❌ Invalid input."
+    fi
+  done
+  # End of the toggle selection loop
+
+  # Build the CSV in listed order from the selected entries
+  local csv=""
+  local i=0
+  while [[ $i -lt ${#dep_array[@]} ]]; do
+    if [[ ${sel_array[$i]} -eq 1 ]]; then
+      if [[ -z "$csv" ]]; then
+        csv="${dep_array[$i]}"
+      else
+        csv="${csv},${dep_array[$i]}"
+      fi
+    fi
+    i=$((i + 1))
+  done
+  # End of loop building the deploy set CSV
+
+  set_deploy_set "$csv"
+  echo ""
+  if [[ -z "$csv" ]]; then
+    echo "✅ Deploy set cleared."
+    return
+  fi
+  echo "✅ Deploy set saved: $csv"
+
+  # Offer to capture an access model for any selected member that lacks one.
+  # Iterate the in-memory arrays (NOT a here-string) so the [y/N] prompt and any
+  # capture prompts below read from the terminal rather than piped data.
+  local ci=0
+  while [[ $ci -lt ${#dep_array[@]} ]]; do
+    local nm="${dep_array[$ci]}"
+    if [[ ${sel_array[$ci]} -eq 1 ]] && ! is_access_managed "$nm"; then
+      echo ""
+      local yn
+      read -r -p "Deployment '$nm' has no access model (would deploy as-is). Set one now? [y/N] " yn
+      if [[ "$yn" =~ ^[Yy]$ ]]; then
+        capture_access_model_interactive "$nm"
+      fi
+    fi
+    ci=$((ci + 1))
+  done
+  # End of loop offering to capture access models
+} # End of function prompt_deploy_set()
+
+##
+# Best-effort behavioral verification that a deployment's access model is what we
+# intended, using an anonymous HTTP request to its /exec URL. This is a heuristic
+# WARNING check (never a hard failure): it inspects the redirect host to decide
+# whether Google forced sign-in. Requires curl; skipped silently if curl is absent.
+# @param {string} $1 - Deployment name
+# @param {string} $2 - Deployment ID
+##
+verify_deployment_access() {
+  local name="$1"
+  local dep_id="$2"
+
+  # Only meaningful for access-managed deployments.
+  if ! is_access_managed "$name"; then
+    return 0
+  fi
+  if ! command -v curl &> /dev/null; then
+    echo "ℹ️  Skipping access verification for '$name' (curl not available)."
+    return 0
+  fi
+
+  local access
+  access=$(get_deployment_access "$name")
+  local url="https://script.google.com/macros/s/${dep_id}/exec"
+
+  local result code redir
+  result=$(curl -s -o /dev/null -m 20 -w '%{http_code}|%{redirect_url}' "$url" 2>/dev/null || echo "000|")
+  code="${result%%|*}"
+  redir="${result#*|}"
+
+  echo ""
+  echo "🔎 Verifying access for '$name' ($access)..."
+
+  # Determine whether Google forced sign-in for the anonymous request.
+  local signin="unknown"
+  if [[ "$redir" == *accounts.google.com* ]]; then
+    signin="forced"
+  elif [[ "$redir" == *googleusercontent.com* ]] || [[ "$code" == "200" ]]; then
+    signin="none"
+  fi
+
+  case "$access" in
+    ANYONE_ANONYMOUS)
+      if [[ "$signin" == "none" ]]; then
+        echo "   ✅ Public deployment served an anonymous request (HTTP $code)."
+      else
+        echo "   ⚠️  Expected public access but sign-in appears required (HTTP $code)."
+        echo "      Verify manually: $url"
+      fi
+      ;;
+    DOMAIN|MYSELF|ANYONE)
+      if [[ "$signin" == "forced" ]]; then
+        echo "   ✅ Restricted deployment forced sign-in for an anonymous request (HTTP $code)."
+      else
+        echo "   🚨 WARNING: restricted deployment did NOT force sign-in (HTTP $code)."
+        echo "      It may be publicly accessible. Verify immediately: $url"
+      fi
+      ;;
+  esac
+} # End of function verify_deployment_access()
+
+##
+# Deploys a single named deployment as part of a batch (used by --all).
+# Regenerates the manifest for access-managed deployments, runs the webapp safety
+# check, pushes, deploys, and verifies. Returns non-zero on any failure WITHOUT
+# exiting, so the caller can stop the batch and report cleanly.
+# @param {string} $1 - Deployment name
+# @param {string} $2 - Deployment description
+# @returns 0 on success, 1 on any failure
+##
+deploy_set_member() {
+  local name="$1"
+  local desc="$2"
+
+  local dep_id
+  dep_id=$(read_config_value "deployment_${name}")
+  if [[ -z "$dep_id" ]]; then
+    echo "❌ No deployment ID stored for '$name'."
+    return 1
+  fi
+
+  # CRITICAL: start every member from the pristine manifest so a previous member's
+  # regenerated webapp block can never leak into this one. Without this, an
+  # unmanaged ("deploys as-is") member would inherit the prior member's access
+  # model — e.g. a restricted admin panel could silently go public. cp (not mv)
+  # keeps the backup for later members and the EXIT trap. The copy is mandatory:
+  # if it fails we must NOT continue (errexit is suppressed inside this function).
+  if [[ -n "$_MANIFEST_BACKUP" && -f "$_MANIFEST_BACKUP" ]]; then
+    if ! cp "$_MANIFEST_BACKUP" "$(get_manifest_path)"; then
+      echo "❌ Could not restore the pristine manifest before deploying '$name'. Aborting."
+      return 1
+    fi
+  fi
+
+  # Access-managed: regenerate the manifest to this deployment's model.
+  if is_access_managed "$name"; then
+    local acc exe
+    acc=$(get_deployment_access "$name")
+    exe=$(get_deployment_execute_as "$name")
+    # Guard against a corrupt/partial stored model (e.g. hand-edited config).
+    if ! validate_access_value "$acc" || ! validate_execute_as_value "$exe"; then
+      echo "❌ Invalid stored access model for '$name': '$acc' / '$exe'."
+      return 1
+    fi
+    echo "🔧 Access model: $acc / $exe"
+    if ! regenerate_manifest_webapp "$acc" "$exe"; then
+      echo "❌ Failed to regenerate the manifest webapp block for '$name'."
+      return 1
+    fi
+    if ! manifest_has_webapp_block "$acc" "$exe"; then
+      echo "❌ Manifest verification failed after regeneration for '$name'."
+      return 1
+    fi
+  fi
+
+  # Never deploy a web-app deployment without a webapp block (library conversion trap).
+  if ! check_webapp_manifest; then
+    echo "❌ appsscript.json has no webapp block; refusing to deploy '$name'."
+    return 1
+  fi
+
+  echo "📤 Pushing files..."
+  if ! claspalt push; then
+    echo "❌ Push failed for '$name'."
+    return 1
+  fi
+
+  echo "📦 Deploying..."
+  local out
+  if ! out=$(claspalt deploy --deploymentId "$dep_id" --description "$desc" 2>&1); then
+    echo "❌ Deploy failed for '$name':"
+    printf '%s\n' "$out"
+    return 1
+  fi
+  printf '%s\n' "$out"
+  echo "✅ '$name' deployed → https://script.google.com/macros/s/${dep_id}/exec"
+
+  verify_deployment_access "$name" "$dep_id"
+  return 0
+} # End of function deploy_set_member()
+
+##
+# Deploys every deployment in the saved deploy set, in order, stopping immediately
+# on the first failure and printing a summary. Validates that all members exist
+# before doing anything (hard error otherwise). Backs up the manifest once; the
+# EXIT trap restores it. Honors --dry-run and --yes.
+# @param {string} $1 - Deployment description
+##
+deploy_all() {
+  local desc="$1"
+
+  local names
+  names=$(get_deploy_set_names)
+
+  # Build a set interactively if empty and we can prompt.
+  if [[ -z "$names" ]]; then
+    if is_interactive && [[ "$SKIP_CONFIRMATION" == "false" ]]; then
+      echo "📋 No deploy set configured yet. Let's build one."
+      prompt_deploy_set
+      names=$(get_deploy_set_names)
+    fi
+  fi
+  if [[ -z "$names" ]]; then
+    echo "❌ No deploy set configured. Run 'claspdeploy --deploy-set' first." >&2
+    exit 1
+  fi
+
+  # Validate every member exists BEFORE doing anything (hard error).
+  local missing=""
+  local n
+  while IFS= read -r n; do
+    [[ -z "$n" ]] && continue
+    if [[ -z "$(read_config_value "deployment_${n}")" ]]; then
+      missing="${missing} ${n}"
+    fi
+  done <<< "$names"
+  # End of loop validating deploy set members
+  if [[ -n "$missing" ]]; then
+    echo "❌ Deploy set references unknown deployment(s):${missing}" >&2
+    echo "   Fix the set with 'claspdeploy --deploy-set'." >&2
+    exit 1
+  fi
+
+  # If appsscript.json is excluded from the push, a regenerated manifest would
+  # never reach the server, silently leaving access-managed deployments on their
+  # old access model. Fatal when any set member is access-managed.
+  if [[ -f ".claspignore" ]] && grep -q "appsscript.json" ".claspignore" 2>/dev/null; then
+    local any_managed=false
+    while IFS= read -r n; do
+      [[ -z "$n" ]] && continue
+      if is_access_managed "$n"; then any_managed=true; fi
+    done <<< "$names"
+    if [[ "$any_managed" == "true" ]]; then
+      echo "❌ .claspignore excludes appsscript.json, but the deploy set has" >&2
+      echo "   access-managed deployments whose regenerated manifest would never be" >&2
+      echo "   pushed. Remove appsscript.json from .claspignore and retry." >&2
+      exit 1
+    fi
+  fi
+
+  echo ""
+  echo "🚀 Deploy set (in order):"
+  while IFS= read -r n; do
+    [[ -z "$n" ]] && continue
+    local model="deploys as-is"
+    if is_access_managed "$n"; then
+      model="$(get_deployment_access "$n") / $(get_deployment_execute_as "$n")"
+    fi
+    echo "   • $n — $(read_config_value "deployment_${n}")  [$model]"
+  done <<< "$names"
+  # End of loop listing the deploy set
+
+  if [[ "$DRY_RUN" == "true" ]]; then
+    echo ""
+    echo "🔍 DRY-RUN: would deploy each of the above with description \"$desc\"."
+    echo "   No push, deploy, or manifest change will be performed."
+    exit 0
+  fi
+
+  if [[ "$SKIP_CONFIRMATION" == "false" ]]; then
+    echo ""
+    read -r -p "Deploy all listed deployments? [Y/n] " confirm
+    confirm=${confirm:-Y}
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+      echo "❌ Deployment cancelled by user."
+      exit 0
+    fi
+  fi
+
+  # Back up the manifest once; the EXIT trap restores it no matter what happens.
+  backup_manifest
+
+  local succeeded=""
+  local failed=""
+  local not_run=""
+  local halted=false
+
+  while IFS= read -r n; do
+    [[ -z "$n" ]] && continue
+    if [[ "$halted" == "true" ]]; then
+      not_run="${not_run} ${n}"
+      continue
+    fi
+    echo ""
+    echo "════════════════════════════════════════"
+    echo "▶ Deploying '$n'..."
+    if deploy_set_member "$n" "$desc"; then
+      succeeded="${succeeded} ${n}"
+    else
+      failed="$n"
+      halted=true
+    fi
+  done <<< "$names"
+  # End of loop deploying each set member (stops on first failure)
+
+  echo ""
+  echo "════════════════════════════════════════"
+  echo "📋 Deploy summary:"
+  [[ -n "$succeeded" ]] && echo "   ✅ Succeeded:${succeeded}"
+  [[ -n "$failed" ]] && echo "   ❌ Failed: $failed"
+  [[ -n "$not_run" ]] && echo "   ⏭  Not attempted:${not_run}"
+
+  if [[ -n "$failed" ]]; then
+    echo ""
+    echo "🚨 Batch stopped on the first failure. Your original manifest will be restored on exit."
+    exit 1
+  fi
+
+  echo ""
+  echo "🎉 All deployments in the set completed successfully."
+} # End of function deploy_all()
+
 # ============================================================================
 # CLI Flag Handling
 # ============================================================================
@@ -546,6 +1054,22 @@ while [[ $# -gt 0 ]]; do
       ;;
     -l|--log)
       ENABLE_LOGGING=true
+      shift
+      ;;
+    --all)
+      ALL_DEPLOYMENTS=true
+      shift
+      ;;
+    -D|--deployment)
+      if [[ $# -lt 2 ]] || [[ -z "${2:-}" ]]; then
+        echo "❌ Option $1 requires a deployment name."
+        exit 1
+      fi
+      TARGET_DEPLOYMENT="$2"
+      shift 2
+      ;;
+    --deploy-set)
+      EDIT_DEPLOY_SET=true
       shift
       ;;
     -ld|--list-deployments)
@@ -585,6 +1109,15 @@ if [[ "$DELETE_DEPLOYMENT" == "true" ]]; then
   exit 0
 fi
 
+if [[ "$EDIT_DEPLOY_SET" == "true" ]]; then
+  if ! is_interactive; then
+    echo "Error: --deploy-set requires an interactive terminal." >&2
+    exit 1
+  fi
+  prompt_deploy_set
+  exit 0
+fi
+
 # Set default description if none provided
 DESC="${DESC:-New version}"
 
@@ -595,35 +1128,171 @@ if ! command -v claspalt &> /dev/null; then
   exit 1
 fi
 
+# Guarantee the working-tree manifest is restored on exit if any deploy path
+# regenerated it (access-managed deployments). No-op when nothing was backed up.
+# Signals restore AND exit so an interrupt can never fall through into later steps
+# (a bare signal trap would return control to the script). restore_manifest is
+# idempotent, so the EXIT trap firing afterwards is harmless.
+trap 'restore_manifest' EXIT
+trap 'restore_manifest; exit 130' INT
+trap 'restore_manifest; exit 143' TERM
+
 # Display current date and time
 echo "🕐 Deployment started at: $(date '+%Y-%m-%d %H:%M:%S')"
 echo ""
 
-# First, push local files to Apps Script using claspalt
-echo "📤 Pushing local files to Apps Script..."
-if ! claspalt push; then
-  echo ""
-  echo "🚨🚨🚨 ATTENTION! 🚨🚨🚨"
-  echo "❌ ERROR: clasp push has failed"
-  echo "💡 Possible causes:"
-  echo "   • Syntax errors in local files"
-  echo "   • Authentication problems with Google"
-  echo "   • Interrupted internet connection"
-  echo "   • .claspignore files blocking necessary files"
-  echo ""
-  echo "🔧 Please review the errors above and try again."
-  echo "   No deployment will be performed until clasp push works correctly."
-  echo ""
-  exit 1
+# --all: deploy the saved set (each with its own access model), then stop.
+# This path does its own per-deployment push/deploy, so it runs before the
+# single-deployment push below.
+if [[ "$ALL_DEPLOYMENTS" == "true" ]]; then
+  if [[ -n "$TARGET_DEPLOYMENT" ]]; then
+    echo "❌ --all and --deployment are mutually exclusive." >&2
+    exit 1
+  fi
+  deploy_all "$DESC"
+  exit 0
 fi
-echo "✅ Files sent correctly"
+
+# NOTE: the push and the Web App Manifest Safety Check happen AFTER target
+# resolution, confirmation, and (for access-managed deployments) manifest
+# regeneration — see below. This guarantees that a mistyped -D, a cancelled
+# deploy, a dry-run, or a failed regeneration never pushes the wrong manifest
+# (or any manifest) to Apps Script.
+
+# ============================================================================
+# Deployment ID Resolution
+# ============================================================================
+
+DEPLOYMENT_ID=""
+DEPLOYMENT_NAME=""
+
+# Handle old-style migration first (only when no explicit target and interactive/no --yes)
+old_style_id=$(read_config_value "deploymentId")
+old_style_name=$(get_active_deployment_name)
+if [[ -z "$TARGET_DEPLOYMENT" ]] && [[ -n "$old_style_id" ]] && [[ -z "$old_style_name" ]]; then
+  # Old-style deploymentId exists but no activeDeployment — migration scenario
+  if is_interactive && [[ "$SKIP_CONFIRMATION" == "false" ]]; then
+    DEPLOYMENT_NAME=$(migrate_single_deployment)
+    DEPLOYMENT_ID=$(get_active_deployment_id)
+  fi
+  # If non-interactive or --yes, fall through to use old ID below
+fi
+
+if [[ -n "$TARGET_DEPLOYMENT" ]]; then
+  # Explicit target (-D/--deployment): unambiguous, works with --yes.
+  if ! validate_deployment_name "$TARGET_DEPLOYMENT"; then
+    echo "Error: invalid deployment name '$TARGET_DEPLOYMENT'." >&2
+    echo "   Use only letters, numbers, hyphens and underscores." >&2
+    exit 1
+  fi
+  DEPLOYMENT_NAME="$TARGET_DEPLOYMENT"
+  DEPLOYMENT_ID=$(read_config_value "deployment_${DEPLOYMENT_NAME}")
+  if [[ -z "$DEPLOYMENT_ID" ]]; then
+    echo "Error: deployment '$TARGET_DEPLOYMENT' not found in claspConfig.txt." >&2
+    echo "Run 'claspdeploy --list-deployments' to see configured deployments." >&2
+    exit 1
+  fi
+elif is_interactive && [[ "$SKIP_CONFIRMATION" == "false" ]]; then
+  # Interactive deployment selection prompt
+  DEPLOYMENT_NAME=$(prompt_deploy_action)
+  DEPLOYMENT_ID=$(read_config_value "deployment_${DEPLOYMENT_NAME}")
+  # Fallback for migration case where name might not have a deployment_ entry
+  if [[ -z "$DEPLOYMENT_ID" ]]; then
+    DEPLOYMENT_ID=$(get_active_deployment_id)
+  fi
+else
+  # Non-interactive or --yes: use active deployment silently
+  DEPLOYMENT_NAME=$(get_active_deployment_name)
+  DEPLOYMENT_ID=$(get_active_deployment_id)
+  if [[ -z "$DEPLOYMENT_ID" ]]; then
+    echo "Error: No deployment configured and running in non-interactive mode." >&2
+    echo "Run interactively first to configure, or use --yes with an already configured project." >&2
+    exit 1
+  fi
+fi
+# End of deployment ID resolution
+
+# Determine whether this deployment carries its own access model.
+MANAGED_ACCESS=""
+MANAGED_EXECUTE_AS=""
+if [[ -n "$DEPLOYMENT_NAME" ]] && is_access_managed "$DEPLOYMENT_NAME"; then
+  MANAGED_ACCESS=$(get_deployment_access "$DEPLOYMENT_NAME")
+  MANAGED_EXECUTE_AS=$(get_deployment_execute_as "$DEPLOYMENT_NAME")
+fi
+
+# Show the deployment info (name + ID when available)
 echo ""
+echo "🚀 Ready to deploy with description: \"$DESC\""
+if [[ -n "$DEPLOYMENT_NAME" ]]; then
+  echo "   Deployment: $DEPLOYMENT_NAME — $DEPLOYMENT_ID"
+else
+  echo "   Deployment ID: $DEPLOYMENT_ID"
+fi
+if [[ -n "$MANAGED_ACCESS" ]]; then
+  echo "   Access model: $MANAGED_ACCESS / $MANAGED_EXECUTE_AS (manifest will be regenerated)"
+fi
+
+# Dry-run mode
+if [[ "$DRY_RUN" == "true" ]]; then
+  echo ""
+  echo "🔍 DRY-RUN MODE: No actual deployment will be performed"
+  echo ""
+  if [[ -n "$MANAGED_ACCESS" ]]; then
+    echo "Would regenerate the appsscript.json webapp block to:"
+    echo "   \"webapp\": {\"access\": \"$MANAGED_ACCESS\", \"executeAs\": \"$MANAGED_EXECUTE_AS\"}"
+    echo "Then push and:"
+  fi
+  echo "Would execute: claspalt deploy --deploymentId \"$DEPLOYMENT_ID\" --description \"$DESC\""
+  exit 0
+fi
+
+# Confirmation prompt (unless --yes was used)
+if [[ "$SKIP_CONFIRMATION" == "false" ]]; then
+  echo ""
+  read -r -p "Proceed with deployment? [Y/n] " confirm
+  confirm=${confirm:-Y}  # Default to Y if just Enter is pressed
+  if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+    echo "❌ Deployment cancelled by user."
+    exit 0
+  fi
+fi
+
+# Access-managed deployments: regenerate the manifest to this deployment's access
+# model BEFORE pushing, so only the correct manifest is ever sent. The EXIT trap
+# restores the original manifest afterwards, so the working tree is left unchanged.
+if [[ -n "$MANAGED_ACCESS" ]]; then
+  # Fatal: if appsscript.json is excluded from the push, the regenerated access
+  # model would never reach the server, silently leaving the old model in place.
+  if [[ -f ".claspignore" ]] && grep -q "appsscript.json" ".claspignore" 2>/dev/null; then
+    echo "❌ .claspignore excludes appsscript.json; the regenerated access model for"
+    echo "   '$DEPLOYMENT_NAME' would never be pushed. Remove it from .claspignore and retry."
+    exit 1
+  fi
+  # Guard against a corrupt/partial stored model (e.g. hand-edited config).
+  if ! validate_access_value "$MANAGED_ACCESS" || ! validate_execute_as_value "$MANAGED_EXECUTE_AS"; then
+    echo "❌ Invalid stored access model for '$DEPLOYMENT_NAME': $MANAGED_ACCESS / $MANAGED_EXECUTE_AS"
+    echo "   Re-register its access model and try again."
+    exit 1
+  fi
+  echo ""
+  echo "🔧 Applying access model for '$DEPLOYMENT_NAME': $MANAGED_ACCESS / $MANAGED_EXECUTE_AS"
+  backup_manifest
+  if ! regenerate_manifest_webapp "$MANAGED_ACCESS" "$MANAGED_EXECUTE_AS"; then
+    echo "❌ Failed to regenerate the appsscript.json webapp block. Deployment aborted."
+    exit 1
+  fi
+  if ! manifest_has_webapp_block "$MANAGED_ACCESS" "$MANAGED_EXECUTE_AS"; then
+    echo "❌ Manifest verification failed after regeneration. Deployment aborted."
+    exit 1
+  fi
+fi
 
 # ============================================================================
 # Web App Manifest Safety Check
 # ============================================================================
-# clasp deploy --deploymentId can silently convert a Web app into a Library
-# if appsscript.json lacks a "webapp" section. Check before deploying.
+# clasp deploy --deploymentId can silently convert a Web app into a Library if
+# appsscript.json lacks a "webapp" section. Check the manifest we are about to
+# push/deploy (already regenerated above for access-managed deployments).
 
 # Use if/else to capture exit code safely under set -e
 if check_webapp_manifest; then
@@ -685,73 +1354,27 @@ elif [[ "$WEBAPP_CHECK" -eq 2 ]]; then
 fi
 # End of Web App Manifest Safety Check
 
-# ============================================================================
-# Deployment ID Resolution
-# ============================================================================
-
-DEPLOYMENT_ID=""
-DEPLOYMENT_NAME=""
-
-# Handle old-style migration first (if needed, only in interactive mode without --yes)
-old_style_id=$(read_config_value "deploymentId")
-old_style_name=$(get_active_deployment_name)
-if [[ -n "$old_style_id" ]] && [[ -z "$old_style_name" ]]; then
-  # Old-style deploymentId exists but no activeDeployment — migration scenario
-  if is_interactive && [[ "$SKIP_CONFIRMATION" == "false" ]]; then
-    DEPLOYMENT_NAME=$(migrate_single_deployment)
-    DEPLOYMENT_ID=$(get_active_deployment_id)
-  fi
-  # If non-interactive or --yes, fall through to use old ID below
-fi
-
-# Interactive deployment selection prompt
-if is_interactive && [[ "$SKIP_CONFIRMATION" == "false" ]]; then
-  DEPLOYMENT_NAME=$(prompt_deploy_action)
-  DEPLOYMENT_ID=$(read_config_value "deployment_${DEPLOYMENT_NAME}")
-  # Fallback for migration case where name might not have a deployment_ entry
-  if [[ -z "$DEPLOYMENT_ID" ]]; then
-    DEPLOYMENT_ID=$(get_active_deployment_id)
-  fi
-else
-  # Non-interactive or --yes: use active deployment silently
-  DEPLOYMENT_NAME=$(get_active_deployment_name)
-  DEPLOYMENT_ID=$(get_active_deployment_id)
-  if [[ -z "$DEPLOYMENT_ID" ]]; then
-    echo "Error: No deployment configured and running in non-interactive mode." >&2
-    echo "Run interactively first to configure, or use --yes with an already configured project." >&2
-    exit 1
-  fi
-fi
-# End of deployment ID resolution
-
-# Show the deployment info (name + ID when available)
+# Push the (possibly regenerated) manifest and code, then deploy. This is the
+# single push for the run — it happens only after resolution, confirmation, and
+# regeneration have all succeeded.
 echo ""
-echo "🚀 Ready to deploy with description: \"$DESC\""
-if [[ -n "$DEPLOYMENT_NAME" ]]; then
-  echo "   Deployment: $DEPLOYMENT_NAME — $DEPLOYMENT_ID"
-else
-  echo "   Deployment ID: $DEPLOYMENT_ID"
-fi
-
-# Dry-run mode
-if [[ "$DRY_RUN" == "true" ]]; then
+echo "📤 Pushing local files to Apps Script..."
+if ! claspalt push; then
   echo ""
-  echo "🔍 DRY-RUN MODE: No actual deployment will be performed"
+  echo "🚨🚨🚨 ATTENTION! 🚨🚨🚨"
+  echo "❌ ERROR: clasp push has failed"
+  echo "💡 Possible causes:"
+  echo "   • Syntax errors in local files"
+  echo "   • Authentication problems with Google"
+  echo "   • Interrupted internet connection"
+  echo "   • .claspignore files blocking necessary files"
   echo ""
-  echo "Would execute: claspalt deploy --deploymentId \"$DEPLOYMENT_ID\" --description \"$DESC\""
-  exit 0
-fi
-
-# Confirmation prompt (unless --yes was used)
-if [[ "$SKIP_CONFIRMATION" == "false" ]]; then
+  echo "🔧 Please review the errors above and try again."
+  echo "   No deployment will be performed until clasp push works correctly."
   echo ""
-  read -r -p "Proceed with deployment? [Y/n] " confirm
-  confirm=${confirm:-Y}  # Default to Y if just Enter is pressed
-  if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-    echo "❌ Deployment cancelled by user."
-    exit 0
-  fi
+  exit 1
 fi
+echo "✅ Files sent correctly"
 
 echo ""
 echo "📦 Deploying..."
@@ -779,6 +1402,9 @@ echo "✅ Deployment successful!"
 WEBAPP_URL="https://script.google.com/macros/s/${DEPLOYMENT_ID}/exec"
 echo ""
 echo "🌐 Web app URL: $WEBAPP_URL"
+
+# Behavioral access-model verification for access-managed deployments (WARN-only).
+verify_deployment_access "$DEPLOYMENT_NAME" "$DEPLOYMENT_ID"
 
 # Also extract any additional URL from clasp output if available
 if [[ "$DEPLOY_OUTPUT" =~ https://script\.google\.com/[^[:space:]]+ ]]; then

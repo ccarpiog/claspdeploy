@@ -169,7 +169,10 @@ claspdeploy [OPTIONS] [DESCRIPTION]
 | `-y, --yes` | Skip confirmation and deployment selection prompts (for CI/CD) |
 | `-n, --dry-run` | Preview without deploying |
 | `-l, --log` | Enable logging to deployment.log |
-| `-ld, --list-deployments` | List all named deployments for this project |
+| `-D, --deployment NAME` | Deploy a specific named deployment (unambiguous target) |
+| `--all` | Deploy every deployment in the saved deploy set, in order |
+| `--deploy-set` | Edit which deployments belong to the `--all` set |
+| `-ld, --list-deployments` | List all named deployments (with access models and set membership) |
 | `-dd, --delete-deployment` | Delete a named deployment |
 
 ### Examples
@@ -210,6 +213,56 @@ claspdeploy --list-deployments
 claspdeploy --delete-deployment
 ```
 
+### Multiple deployments with different access models
+
+One Apps Script project can back several web-app deployments that each need a
+**different access model** — for example a public parent form and a
+domain-restricted admin panel — while keeping their URLs permanently stable.
+
+The web-app access settings (`webapp.access` + `webapp.executeAs`) live inside the
+versioned `appsscript.json`. A deployment can store its own access model in
+`claspConfig.txt`; such a deployment is **access-managed**. Before deploying an
+access-managed deployment, `claspdeploy`:
+
+1. regenerates the `appsscript.json` `webapp` block to that deployment's model,
+2. pushes and deploys,
+3. verifies (an anonymous request to the restricted deployment must be redirected
+   to sign-in; a public one must serve directly), and
+4. restores your original `appsscript.json`, leaving the working tree unchanged.
+
+Deployments **without** a stored access model deploy exactly as before — the
+manifest is never touched — so existing single-deployment projects are unaffected.
+
+**Capturing an access model.** The intended workflow is: create and configure the
+deployment in the Apps Script UI (Deploy → Manage deployments), then register it in
+`claspdeploy` and set its access model once, reading the values from the UI's gear
+dialog. You are offered this when registering or creating a deployment, and when
+building a deploy set. After that, the stored config is the source of truth and is
+reproduced on every redeploy.
+
+**Deploying several at once (`--all`).** Choose the deployments once to build a
+saved, ordered *deploy set*:
+
+```bash
+claspdeploy --deploy-set          # multi-select editor; also captures access models
+```
+
+Then deploy them all with a single command:
+
+```bash
+claspdeploy --all "Release to parent form + admin panel"
+```
+
+`--all` deploys the set in order, each with its own access model, and **stops
+immediately** on the first failure, printing a summary of what succeeded, what
+failed, and what was not attempted. Your `appsscript.json` is restored regardless.
+
+To deploy just one deployment unambiguously (e.g. in CI):
+
+```bash
+claspdeploy --deployment admin --yes "Admin panel update"
+```
+
 ### First Run
 
 On first run in a new project:
@@ -228,15 +281,26 @@ Each project has a `claspConfig.txt` file:
 
 ```
 account=work
-activeDeployment=prod
-deployment_prod=AKfycbwXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-deployment_dev=AKfycbwYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY
+activeDeployment=parent
+deployment_parent=AKfycbwXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+deployment_admin=AKfycbwYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY
+access_parent=ANYONE_ANONYMOUS
+executeAs_parent=USER_DEPLOYING
+access_admin=DOMAIN
+executeAs_admin=USER_DEPLOYING
+deploySet=parent,admin
 deploymentId=AKfycbwXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 ```
 
 - `activeDeployment` — name of the currently active deployment
 - `deployment_{name}` — named deployment ID entries
+- `access_{name}` / `executeAs_{name}` — per-deployment web-app access model
+  (present only for access-managed deployments)
+- `deploySet` — comma-separated, ordered list of deployments for `--all`
 - `deploymentId` — backward-compatible mirror of the active deployment's ID
+
+> Deployment names are restricted to letters, numbers, hyphens and underscores, so
+> they are always safe as config-key suffixes and as `deploySet` CSV values.
 
 ### Migration from old formats
 
