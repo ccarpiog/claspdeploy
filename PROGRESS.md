@@ -79,5 +79,6 @@ real GAS project to confirm the on-screen prompt UX end-to-end.
 
 ## Git state
 
-Commit: (recorded on commit below). Push: (recorded below). Tree: clean after commit
-(the untracked `.claude/reviews/` artifact is intentionally left out of the commit).
+Commit: `350d79b` on `main` ("Prompt for deployment description when none is given").
+Push: success — `97fc814..350d79b main -> main` to `origin` (github.com:ccarpiog/claspalt).
+Tree: clean except the intentionally-untracked `.claude/reviews/` session artifact.
