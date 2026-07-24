@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Usage: claspdeploy [OPTIONS] "Deployment description"
-# If no description is provided, it will use "New version".
+# If no description is provided, you are prompted for one in interactive mode
+# (press Enter to accept the default "New version"); --yes and non-interactive
+# runs use "New version" without prompting.
 #
 # This script uses claspalt for multi-account credential management.
 # Project configuration is stored in claspConfig.txt
@@ -56,7 +58,9 @@ OPTIONS:
   -dd, --delete-deployment  Delete a named deployment
 
 DESCRIPTION:
-  Optional deployment description. Defaults to "New version" if not provided.
+  Optional deployment description. If omitted, an interactive run prompts for one
+  (press Enter for the default "New version"); --yes and non-interactive runs use
+  "New version" without prompting.
 
 EXAMPLES:
   claspdeploy "Fixed bug in user authentication"
@@ -585,9 +589,6 @@ if [[ "$DELETE_DEPLOYMENT" == "true" ]]; then
   exit 0
 fi
 
-# Set default description if none provided
-DESC="${DESC:-New version}"
-
 # Check that claspalt is available
 if ! command -v claspalt &> /dev/null; then
   echo "Error: claspalt is not installed or not in PATH." >&2
@@ -723,6 +724,16 @@ else
   fi
 fi
 # End of deployment ID resolution
+
+# Prompt for a deployment description if none was provided on the command line
+if [[ -z "$DESC" ]]; then
+  if is_interactive && [[ "$SKIP_CONFIRMATION" == "false" ]]; then
+    # '|| true' keeps set -e from aborting on EOF (Ctrl-D); partial input is kept
+    read -r -p "📝 Enter a deployment description (press Enter for \"New version\"): " DESC || true
+  fi
+  # Fall back to the default if still empty (blank input, EOF, --yes, or non-interactive)
+  DESC="${DESC:-New version}"
+fi
 
 # Show the deployment info (name + ID when available)
 echo ""
